@@ -1,0 +1,9 @@
+*.exe
+debug
+*.log
+.vscode
+.idea
+/__debug_bin
+/tester/covprofile
+/tester/coverage.html
+*dtsp_go.log*
