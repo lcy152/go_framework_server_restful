@@ -6,6 +6,7 @@ type UserToInstitution struct {
 	ID              primitive.ObjectID `json:"_id" bson:"_id"`
 	Institution     primitive.ObjectID `json:"institution" bson:"institution"`
 	InstitutionName string             `json:"institution_name" bson:"institution_name"`
+	Manager         bool               `json:"manager" bson:"manager"`
 	Current         bool               `json:"current" bson:"current"`
 	User            primitive.ObjectID `json:"user" bson:"user"`
 	UserName        string             `json:"user_name" bson:"user_name"`
@@ -15,3 +16,9 @@ type UserToInstitution struct {
 	DipperUser      string             `json:"dipper_user" bson:"dipper_user"`
 	DipperPassword  string             `json:"dipper_password" bson:"dipper_password"`
 }
+
+const (
+	UserToInstitutionWorker     = "worker"
+	UserToInstitutionPatient    = "patient"
+	UserToInstitutionTypeDoctor = "doctor"
+)

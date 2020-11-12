@@ -37,6 +37,16 @@ func (database *Database) GetInstitution(ctx context.Context, guid primitive.Obj
 	return user, nil
 }
 
+func (database *Database) GetInstitutionCode(ctx context.Context, code string) (*model.Institution, error) {
+	db := database.DB.Collection(table.Institution)
+	user := new(model.Institution)
+	err := db.FindOne(ctx, bson.D{{"code", code}}).Decode(user)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
 func (database *Database) LoadInstitution(ctx context.Context, opt *option) ([]*model.Institution, int64, error) {
 	db := database.DB.Collection(table.Institution)
 	need := make(map[OptionKey]string)

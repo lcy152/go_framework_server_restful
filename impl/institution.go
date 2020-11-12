@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"strconv"
-	"time"
 	"tumor_server/db"
 	framework "tumor_server/framework"
 	message "tumor_server/message"
@@ -14,35 +13,79 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-func AddInstitution(c *framework.Context) {
+func AddAddInstitutionApplication(c *framework.Context) {
 	defer PanicHandler(c)
-	data := &model.Institution{}
+	var data = &model.AddInstitutionApplication{}
 	CheckHandler(!c.ParseBody(data), message.JsonParseError)
 	userInfo := GetContextUserInfo(c)
 	sc := service.GetContainerInstance()
-	session, ctx, err := sc.DB.StartSession()
-	CheckHandler(err, message.HttpError)
-	defer session.Close()
-	tn := time.Now()
-	data.ID = NewUUID()
-	data.CreateTime = tn
-	data.Creator = userInfo.User.ID
-	err = sc.DB.AddInstitution(ctx, data)
-	CheckHandler(err, message.AddError)
-	userRefIns := &model.UserToInstitution{
-		ID:              NewUUID(),
-		Institution:     data.ID,
-		InstitutionName: data.Name,
-		User:            userInfo.User.ID,
-		UserName:        userInfo.User.Name,
+	_, err := sc.DB.GetInstitutionCode(context.TODO(), data.Institution.Code)
+	CheckHandler(err == nil, message.GetError)
+	{
+		option := db.NewOptions()
+		option.EQ[db.OptUser] = userInfo.User.ID
+		option.EQ[db.OptStatus] = model.AddInstitutionApplicationStatusWait
+		uaList, _, _ := sc.DB.LoadAddInstitutionApplication(context.TODO(), option)
+		CheckHandler(len(uaList) != 0, message.RequestRepeatError)
 	}
-	err = sc.DB.AddUserToInstitution(ctx, userRefIns)
+	data.ID = primitive.NewObjectID()
+	data.User = userInfo.User.ID
+	data.UserName = userInfo.User.Name
+	data.Status = model.AddInstitutionApplicationStatusWait
+	data.Institution.ID = primitive.NewObjectID()
+	data.Institution.Creator = data.User
+	err = sc.DB.AddAddInstitutionApplication(context.TODO(), data)
 	CheckHandler(err, message.AddError)
-	session.Commit()
-	if sc.RabbitMQ != nil {
-		sc.RabbitMQ.Connect()
+	opt := db.NewOptions()
+	opt.EQ[db.OptType] = "admin"
+	urList, _, _ := sc.DB.LoadUser(context.TODO(), opt)
+	for _, v := range urList {
+		jsonStr, _ := json.Marshal(data)
+		service.SendInstitutionMessage(v.ID.String(), string(jsonStr))
 	}
-	HttpReponseHandler(c, data)
+	HttpReponseHandler(c, nil)
+}
+
+func DeleteAddInstitutionApplication(c *framework.Context) {
+	defer PanicHandler(c)
+	id := c.GetParam("id")
+	oid, _ := primitive.ObjectIDFromHex(id)
+	sc := service.GetContainerInstance()
+	application, err := sc.DB.GetAddInstitutionApplication(context.TODO(), oid)
+	CheckHandler(err, message.GetError)
+	CheckHandler(application.Status != model.AddInstitutionApplicationStatusWait, message.GetError)
+	err = sc.DB.DeleteAddInstitutionApplication(context.TODO(), oid)
+	CheckHandler(err, message.DeleteError)
+	HttpReponseHandler(c, nil)
+}
+
+func LoadUserAddInstitutionApplication(c *framework.Context) {
+	defer PanicHandler(c)
+	pageSizeStr := c.GetURLParam("page_size")
+	pageIndexStr := c.GetURLParam("page_index")
+	search := c.GetURLParam("search")
+	status := c.GetURLParam("status")
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	CheckHandler(err, message.RequestDataError)
+	pageIndex, err := strconv.Atoi(pageIndexStr)
+	CheckHandler(err, message.RequestDataError)
+
+	userInfo := GetContextUserInfo(c)
+	option := db.NewOptions()
+	option.PageSize = pageSize
+	option.PageIndex = pageIndex
+	option.EQ[db.OptUser] = userInfo.User.ID
+	if search != "" {
+		option.Match[db.OptUserName] = search
+		option.Match[db.OptInstitutionName] = search
+	}
+	if status != "" {
+		option.EQ[db.OptStatus] = status
+	}
+	sc := service.GetContainerInstance()
+	insList, count, err := sc.DB.LoadAddInstitutionApplication(context.TODO(), option)
+	CheckHandler(err, message.GetError)
+	HttpReponseListHandler(c, count, insList)
 }
 
 func GetInstitution(c *framework.Context) {
@@ -110,25 +153,41 @@ func LoadInstitution(c *framework.Context) {
 }
 
 func ApplyInstitution(c *framework.Context) {
+	defer PanicHandler(c)
 	var data = &model.InstitutionApplication{}
 	CheckHandler(!c.ParseBody(data), message.JsonParseError)
 	userInfo := GetContextUserInfo(c)
 	sc := service.GetContainerInstance()
 	institution, err := sc.DB.GetInstitution(context.TODO(), data.Institution)
 	CheckHandler(institution == nil, message.GetError)
-	option := db.NewOptions()
-	option.EQ[db.OptUser] = userInfo.User.ID
-	option.EQ[db.OptInstitution] = institution.ID
-	uaList, _, _ := sc.DB.LoadInstitutionApplication(context.TODO(), option)
-	for _, v := range uaList {
-		CheckHandler(v.Status == model.ApplicationStatusWait, message.RequestRepeatError)
+	{
+		option := db.NewOptions()
+		option.EQ[db.OptUser] = userInfo.User.ID
+		option.EQ[db.OptInstitution] = institution.ID
+		option.EQ[db.OptStatus] = model.ApplicationStatusWait
+		uaList, _, _ := sc.DB.LoadInstitutionApplication(context.TODO(), option)
+		CheckHandler(len(uaList) == 0, message.RequestRepeatError)
 	}
+	{
+		_, err := sc.DB.GetUserToInstitutionUserType(context.TODO(), institution.ID, userInfo.User.ID, data.UserToInstitution.Type)
+		CheckHandler(err == nil, message.RequestRepeatError)
+	}
+
+	data.ID = primitive.NewObjectID()
+	data.InstitutionName = institution.Name
+	data.User = userInfo.User.ID
+	data.UserName = userInfo.User.Name
+	data.Status = model.ApplicationStatusWait
+	data.UserToInstitution.ID = primitive.NewObjectID()
+	data.UserToInstitution.Institution = data.Institution
+	data.UserToInstitution.InstitutionName = data.InstitutionName
+	data.UserToInstitution.User = data.User
+	data.UserToInstitution.UserName = data.UserName
 	err = sc.DB.AddInstitutionApplication(context.TODO(), data)
 	CheckHandler(err, message.AddError)
 	opt := db.NewOptions()
 	opt.EQ[db.OptInstitution] = data.Institution
-	opt.EQ[db.OptManager] = true
-	urList, err := sc.DB.LoadUserToInstitution(context.TODO(), opt)
+	urList, err := sc.DB.LoadUserToInstitutionToRole(context.TODO(), opt)
 	for _, v := range urList {
 		jsonStr, _ := json.Marshal(data)
 		service.SendInstitutionMessage(v.User.String(), string(jsonStr))

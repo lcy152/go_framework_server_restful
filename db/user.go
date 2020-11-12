@@ -100,6 +100,7 @@ func (database *Database) LoadUser(ctx context.Context, opt *option) ([]*model.U
 	need[OptDisable] = "disable"
 	need[OptHidden] = "hidden"
 	need[OptStatus] = "status"
+	need[OptType] = "type"
 	query, option := opt.toFind(need)
 	option.Projection = bson.M{"token": 0, "password": 0}
 	count, err := db.CountDocuments(ctx, query)

@@ -53,7 +53,7 @@ func DipperTaskPublish(institutionId string, data []byte) bool {
 	}
 	res.ID = NewUUID()
 
-	refIns, _ := sc.DB.GetUserToInstitutionUser(context.TODO(), res.Institution, res.ExecuteUser)
+	refIns, _ := sc.DB.GetUserToInstitutionUserType(context.TODO(), res.Institution, res.ExecuteUser, model.UserToInstitutionWorker)
 	if refIns == nil {
 		log.Println(err)
 		return false
@@ -64,7 +64,7 @@ func DipperTaskPublish(institutionId string, data []byte) bool {
 	}
 	// res.ExecuteUser = refIns.DipperUser
 
-	refIns2, _ := sc.DB.GetUserToInstitutionUser(context.TODO(), res.Institution, res.RefPatient)
+	refIns2, _ := sc.DB.GetUserToInstitutionUserType(context.TODO(), res.Institution, res.RefPatient, model.UserToInstitutionWorker)
 	if refIns2 == nil {
 		res.RefPatient = refIns2.User
 	}

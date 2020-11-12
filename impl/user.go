@@ -129,11 +129,21 @@ func UserInstitutionList(c *framework.Context) {
 	opt.EQ[db.OptUser] = userInfo.User.ID
 	insList, err := sc.DB.LoadUserToInstitution(context.TODO(), opt)
 	CheckHandler(err, message.GetListError)
-	institutionList := []model.Institution{}
+	type E struct {
+		model.Institution
+		Type string `json:"type" bson:"type"`
+		Job  string `json:"job" bson:"job"`
+	}
+	institutionList := []E{}
 	for _, refIns := range insList {
 		ins, err := sc.DB.GetInstitution(context.TODO(), refIns.Institution)
 		CheckHandler(err, message.GetError)
-		institutionList = append(institutionList, *ins)
+		e := E{
+			Institution: *ins,
+			Type:        refIns.Type,
+			Job:         refIns.Job,
+		}
+		institutionList = append(institutionList, e)
 	}
 	HttpReponseHandler(c, institutionList)
 }
@@ -281,18 +291,19 @@ func DeleteFriend(c *framework.Context) {
 func GetUserDetailInstitution(c *framework.Context) {
 	defer PanicHandler(c)
 	institutionID := c.GetParam("institution_id")
+	userType := c.GetParam("user_type")
 	oid, _ := primitive.ObjectIDFromHex(institutionID)
 	sc := service.GetContainerInstance()
 	userInfo := GetContextUserInfo(c)
-	utu, err := sc.DB.GetUserToInstitutionUser(context.TODO(), oid, userInfo.User.ID)
+	utu, err := sc.DB.GetUserToInstitutionUserType(context.TODO(), oid, userInfo.User.ID, userType)
 	CheckHandler(err, message.GetError)
 	HttpReponseHandler(c, utu)
 }
 
 func ChangeCurrentInstitution(c *framework.Context) {
 	defer PanicHandler(c)
-	institutionID := c.GetParam("institution_id")
-	oid, _ := primitive.ObjectIDFromHex(institutionID)
+	id := c.GetParam("id")
+	oid, _ := primitive.ObjectIDFromHex(id)
 
 	sc := service.GetContainerInstance()
 	userInfo := GetContextUserInfo(c)
@@ -325,7 +336,7 @@ func AuthDipperUser(c *framework.Context) {
 
 	sc := service.GetContainerInstance()
 	userInfo := GetContextUserInfo(c)
-	ur, _ := sc.DB.GetUserToInstitutionUser(context.TODO(), data.Institution, userInfo.User.ID)
+	ur, _ := sc.DB.GetUserToInstitutionUserType(context.TODO(), data.Institution, userInfo.User.ID, "")
 	CheckHandler(ur == nil, message.RequestDataError)
 	service.ValidateDipperUserPublish(data)
 	HttpReponseHandler(c, nil)

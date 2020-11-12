@@ -37,10 +37,10 @@ func (database *Database) GetUserToInstitution(ctx context.Context, guid primiti
 	return user, nil
 }
 
-func (database *Database) GetUserToInstitutionUser(ctx context.Context, institutionId, userGuid primitive.ObjectID) (*model.UserToInstitution, error) {
+func (database *Database) GetUserToInstitutionUserType(ctx context.Context, institutionId, userGuid primitive.ObjectID, userType string) (*model.UserToInstitution, error) {
 	db := database.DB.Collection(table.UserToInstitution)
 	uti := new(model.UserToInstitution)
-	err := db.FindOne(ctx, bson.D{{"institution", institutionId}, {"user", userGuid}}).Decode(uti)
+	err := db.FindOne(ctx, bson.D{{"institution", institutionId}, {"user", userGuid}, {"type", userType}}).Decode(uti)
 	if err != nil {
 		return nil, err
 	}
@@ -55,6 +55,13 @@ func (database *Database) GetUserToInstitutionDipperUser(ctx context.Context, in
 		return nil, err
 	}
 	return uti, nil
+}
+
+func (database *Database) LoadUserToInstitutionInstitutionUser(ctx context.Context, institutionId, userGuid primitive.ObjectID) ([]*model.UserToInstitution, error) {
+	opt := NewOptions()
+	opt.EQ[OptInstitution] = institutionId
+	opt.EQ[OptUser] = userGuid
+	return database.LoadUserToInstitution(ctx, opt)
 }
 
 func (database *Database) LoadUserToInstitutionInstitution(ctx context.Context, institutionId primitive.ObjectID) ([]*model.UserToInstitution, error) {

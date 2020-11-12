@@ -40,9 +40,8 @@ func (database *Database) GetInstitutionApplication(ctx context.Context, guid pr
 func (database *Database) LoadInstitutionApplication(ctx context.Context, opt *option) ([]*model.InstitutionApplication, int64, error) {
 	db := database.DB.Collection(table.InstitutionApplication)
 	need := make(map[OptionKey]string)
-	need[OptInstitution] = "institution_id"
+	need[OptInstitution] = "institution"
 	need[OptStatus] = "status"
-	need[OptType] = "type"
 	need[OptUser] = "user"
 	query, option := opt.toFind(need)
 	count, err := db.CountDocuments(ctx, query)

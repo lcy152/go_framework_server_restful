@@ -25,6 +25,14 @@ func NewServer() *framework.Engine {
 	s.POST("/v1/short_message_register", impl.Register)
 	s.GET("/v1/short_message/:phone", impl.GetShortMessageCode)
 
+	// super_admin
+	s.AddMiddleware("/v1/super_admin", impl.V1SuperAdminMiddleware)
+	s.PUT("/v1/super_admin/institution", impl.AddInstitution)
+	// add institution
+	s.GET("/v1/super_admin/institution_application", impl.LoadAddInstitutionApplication)
+	s.POST("/v1/super_admin/institution_application/:id", impl.ApproveAddInstitutionApplication)
+	s.DELETE("/v1/super_admin/institution_application/:id", impl.RejectAddInstitutionApplication)
+
 	// admin
 	s.AddMiddleware("/v1/admin", impl.V1AdminMiddleware)
 	s.GET("/v1/admin/user_list", impl.UserList)
@@ -39,8 +47,8 @@ func NewServer() *framework.Engine {
 	// user_detail
 	s.POST("/v1/auth/user_detail/password", impl.EditUserPassword)
 	s.POST("/v1/auth/user_detail/phone", impl.EditUserPhone)
-	s.POST("/v1/auth/user_detail/institution/:institution_id", impl.ChangeCurrentInstitution)
-	s.GET("/v1/auth/user_detail/institution/:institution_id", impl.GetUserDetailInstitution)
+	s.POST("/v1/auth/user_detail/institution/:id", impl.ChangeCurrentInstitution)
+	s.GET("/v1/auth/user_detail/institution/:institution_id/:user_type", impl.GetUserDetailInstitution)
 	s.GET("/v1/auth/user_detail/friend_list", impl.UserFriendList)
 	s.GET("/v1/auth/user_detail/institution_list", impl.UserInstitutionList)
 	s.GET("/v1/auth/user_detail/role_list/:user_id/:institution_id", impl.UserRoleList)
@@ -56,9 +64,14 @@ func NewServer() *framework.Engine {
 
 	// institution
 	s.GET("/v1/auth/institution/:id", impl.GetInstitution)
-	s.PUT("/v1/auth/institution", impl.AddInstitution)
 	s.POST("/v1/auth/institution", impl.EditInstitution)
 	s.DELETE("/v1/auth/institution/:id", impl.DeleteInstitution)
+	s.PUT("/v1/auth/institution", impl.AddInstitution)
+
+	// add institution
+	s.GET("/v1/auth/institution_application", impl.LoadUserAddInstitutionApplication)
+	s.PUT("/v1/auth/institution_application", impl.AddAddInstitutionApplication)
+	s.DELETE("/v1/auth/institution_application/:id", impl.DeleteAddInstitutionApplication)
 
 	// institution detail
 	s.GET("/v1/auth/institution_list", impl.LoadInstitution)
