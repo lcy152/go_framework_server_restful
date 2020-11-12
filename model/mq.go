@@ -1,5 +1,7 @@
 package model
 
+import "go.mongodb.org/mongo-driver/bson/primitive"
+
 const (
 	MQUserValidation = "MQUserValidation"
 	MQTask           = "MQTask"
@@ -13,10 +15,10 @@ type MqMessage struct {
 }
 
 type ValidateDipperUser struct {
-	InstitutionId string `json:"institution_id" bson:"institution_id"`
-	Flag          string `json:"flag" bson:"flag"`
-	UserGuid      string `json:"user_guid" bson:"user_guid"`
-	DipperUser    string `json:"dipper_user" bson:"dipper_user"`
-	Password      string `json:"password" bson:"password"`
-	Pass          bool   `json:"pass" bson:"pass"`
+	Institution primitive.ObjectID `json:"institution" bson:"institution"`
+	Flag        string             `json:"flag" bson:"flag"`
+	UserGuid    string             `json:"user_guid" bson:"user_guid"`
+	DipperUser  string             `json:"dipper_user" bson:"dipper_user"`
+	Password    string             `json:"password" bson:"password"`
+	Pass        bool               `json:"pass" bson:"pass"`
 }

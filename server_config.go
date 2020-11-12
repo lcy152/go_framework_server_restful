@@ -17,9 +17,8 @@ func ParseConfig(file string) *service.ServerConfig {
 	pwd, _ := os.Getwd()
 
 	config := &service.ServerConfig{}
-	config.Port = cfg.Section("config").Key("HttpPort").MustInt(2324)
-	config.RedisIP = cfg.Section("config").Key("RedisIP").MustString("127.0.0.1")
-	config.RedisPort = cfg.Section("config").Key("RedisPort").MustInt(6379)
+	config.Port = cfg.Section("config").Key("HttpPort").MustInt(2325)
+	config.RedisIP = cfg.Section("config").Key("RedisIP").MustString("127.0.0.1:6379")
 	config.ExpireTime = cfg.Section("config").Key("ExpireTime").MustInt(3600)
 	config.ShortMessageInvalidTime = cfg.Section("config").Key("ShortMessageInvalidTime").MustInt(300)
 	config.ShortMessageSpaceTime = cfg.Section("config").Key("ShortMessageSpaceTime").MustInt(60)

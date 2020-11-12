@@ -1,11 +1,8 @@
 package db
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"log"
 	"time"
-	"tumor_server/model"
 
 	"github.com/fatih/structs"
 	uuid "github.com/satori/go.uuid"
@@ -39,7 +36,6 @@ func NewDatabase(url string) *Database {
 	err = client.Connect(ctx)
 	database.ensureIndex(context.TODO())
 	database.CreateEmptyTable()
-	database.createDefaultData()
 	//defer cancel()
 	return database
 }
@@ -79,7 +75,6 @@ func (db *Database) ensureIndex(ctx context.Context) error {
 		_, err = idxs.CreateOne(ctx, idm)
 		return err
 	}
-
 	err := ensure(table.User, bson.D{{"phone", 1}})
 	if err != nil {
 		return err
@@ -112,69 +107,4 @@ func (db *Database) CreateEmptyTable() {
 		}
 	}
 
-}
-
-func (db *Database) createDefaultData() {
-	appCon, err := db.LoadAppConfig(context.TODO())
-	if err == nil && len(appCon) == 0 {
-		appConfig := &model.AppConfig{
-			Guid:       "000001",
-			AppVersion: "1.0.0",
-			AppUrl:     "fs/AppVersion/tumor.apk",
-		}
-		err := db.AddAppConfig(context.TODO(), appConfig)
-		if err != nil {
-			log.Println("error: db auto create appconfig error")
-		}
-	}
-	admin := db.GetUser(context.TODO(), model.AdminGuid)
-	if admin == nil {
-		data := []byte("datu2012")
-		md5Ctx := md5.New()
-		md5Ctx.Write(data)
-		cipherStr := md5Ctx.Sum(nil)
-		admin = &model.User{
-			Guid:     model.AdminGuid,
-			Name:     "admin",
-			Password: hex.EncodeToString(cipherStr),
-			Phone:    "15221536381",
-			Token:    "eyJndWlkIjoiYWRtaW4iLCJsb2dpbl90aW1lIjoxNTg5OTY0Nzc4fQ==",
-		}
-		err := db.AddUser(context.TODO(), admin)
-		if err != nil {
-			log.Println("error: db auto create user error")
-		}
-	}
-	ins := db.GetInstitution(context.TODO(), "datu")
-	if ins == nil {
-		ins = &model.Institution{
-			Guid:    "datu",
-			Name:    "shanghai datu",
-			Manager: []string{admin.Guid},
-			KeyCode: "ehpPUIlBTO6d5UFYI9KHkRKlpX",
-		}
-		err := db.AddInstitution(context.TODO(), ins)
-		if err != nil {
-			log.Println("error: db auto create institution error")
-		}
-	}
-	ur := db.GetUserRouter(context.TODO(), "admin_router")
-	if ur == nil {
-		ur = &model.UserRouter{
-			Guid:            "admin_router",
-			InstitutionId:   ins.Guid,
-			InstitutionName: ins.Name,
-			UserGuid:        admin.Guid,
-			Flag:            "user",
-			IsCurrent:       true,
-		}
-		err := db.AddUserRouter(context.TODO(), ur)
-		if err != nil {
-			log.Println("error: db auto create user_router error")
-		}
-	}
-}
-
-func NewUUID() string {
-	return uuid.Must(uuid.NewV4(), nil).String()
 }

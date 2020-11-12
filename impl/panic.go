@@ -1,11 +1,12 @@
 package impl
 
 import (
-	"log"
 	"runtime"
 	framework "tumor_server/framework"
 	"tumor_server/message"
 	"tumor_server/model"
+
+	"github.com/sirupsen/logrus"
 )
 
 type NetError struct {
@@ -19,7 +20,7 @@ func CheckHandler(err interface{}, msg string) {
 	switch e := err.(type) {
 	case error:
 		isError = true
-		log.Printf("error: %s\n", e.Error())
+		logrus.Printf("error: %s\n", e.Error())
 	case bool:
 		isError = e
 	}
@@ -27,14 +28,14 @@ func CheckHandler(err interface{}, msg string) {
 		funcName, file, line, ok := runtime.Caller(1)
 		funcNameStr := runtime.FuncForPC(funcName).Name()
 		if ok {
-			log.Printf("error: %s  %d  %s  %s\n", funcNameStr, line, msg, file)
+			logrus.Printf("error: %s  %d  %s  %s\n", funcNameStr, line, msg, file)
 			// funcName2, file2, line2, ok2 := runtime.Caller(2)
 			// funcNameStr2 := runtime.FuncForPC(funcName2).Name()
 			// if ok2 {
-			// 	log.Printf("error: %s  %d  %s\n", funcNameStr2, line2, file2)
+			// 	logrus.Printf("error: %s  %d  %s\n", funcNameStr2, line2, file2)
 			// }
 		} else {
-			log.Printf("error: %s  getFunc: %s\n", msg, "fail")
+			logrus.Printf("error: %s  getFunc: %s\n", msg, "fail")
 		}
 		myError := NetError{
 			Msg:  msg,
@@ -47,7 +48,7 @@ func CheckHandler(err interface{}, msg string) {
 
 func PanicHandler(c *framework.Context) {
 	if r := recover(); r != nil {
-		log.Println(r)
+		logrus.Println(r)
 		response := model.HttpResponse{Code: 500}
 		switch e := r.(type) {
 		case NetError:
@@ -65,20 +66,20 @@ func PanicHandler(c *framework.Context) {
 
 func HttpReponseHandler(c *framework.Context, data interface{}) {
 	response := model.HttpResponse{Code: 200, Msg: message.HttpOk, Data: data}
-	c.Error(response.ToJson())
+	c.Success(response.ToJson())
 }
 
 func HttpReponseErrorHandler(c *framework.Context, msg string) {
-	response := model.HttpResponse{Code: 200, Msg: msg}
+	response := model.HttpResponse{Code: 203, Msg: msg}
 	c.Error(response.ToJson())
 }
 
 func HttpReponseListHandler(c *framework.Context, count int64, data interface{}) {
 	response := model.HttpResponse{Code: 200, Msg: message.HttpOk, Count: count, Data: data}
-	c.Error(response.ToJson())
+	c.Success(response.ToJson())
 }
 
 func HttpReponseExtraListHandler(c *framework.Context, count int64, extra string, data interface{}) {
 	response := model.HttpResponse{Code: 200, Msg: message.HttpOk, Count: count, Flag: extra, Data: data}
-	c.Error(response.ToJson())
+	c.Success(response.ToJson())
 }

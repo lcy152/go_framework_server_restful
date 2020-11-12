@@ -10,24 +10,21 @@ import (
 
 type RedisService struct {
 	IP            string
-	Port          int
 	RedisPool     *redis.Pool
 	ExpireTime    int
 	BlackListTime int
 }
 
-func ConnectRedis(ip string, port, expireTime, blackListTime int) *RedisService {
-	url := ip + ":" + strconv.Itoa(port)
+func ConnectRedis(ip string, expireTime, blackListTime int) *RedisService {
 	redisPool := &redis.Pool{
 		MaxIdle:     10,
 		IdleTimeout: 240 * time.Second,
 		Dial: func() (redis.Conn, error) {
-			return redis.Dial("tcp", url)
+			return redis.Dial("tcp", ip)
 		},
 	}
 	rs := &RedisService{
 		IP:         ip,
-		Port:       port,
 		RedisPool:  redisPool,
 		ExpireTime: expireTime,
 	}

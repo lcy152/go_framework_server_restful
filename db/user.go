@@ -8,19 +8,17 @@ import (
 
 	uuid "github.com/satori/go.uuid"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func (database *Database) AddUser(ctx context.Context, user *model.User) error {
 	db := database.DB.Collection(table.User)
-	tn := time.Now()
-	user.CreateTime = tn
-	user.LastModTime = tn
 	_, error := db.InsertOne(ctx, user)
 	return error
 }
 
-func (database *Database) DeleteUser(ctx context.Context, guid string) error {
+func (database *Database) DeleteUser(ctx context.Context, guid primitive.ObjectID) error {
 	db := database.DB.Collection(table.User)
 	_, error := db.DeleteOne(ctx, bson.D{{"_id", guid}})
 	return error
@@ -30,80 +28,78 @@ func (database *Database) UpdateUser(ctx context.Context, user *model.User) erro
 	db := database.DB.Collection(table.User)
 	tn := time.Now()
 	user.LastModTime = tn
-	_, error := db.UpdateOne(ctx, bson.D{{"_id", user.Guid}}, bson.D{{"$set", user}})
+	_, error := db.UpdateOne(ctx, bson.D{{"_id", user.ID}}, bson.D{{"$set", user}})
 	return error
 }
 
-func (database *Database) GetUser(ctx context.Context, guid string) *model.User {
+func (database *Database) GetUser(ctx context.Context, guid primitive.ObjectID) (*model.User, error) {
 	db := database.DB.Collection(table.User)
 	user := new(model.User)
-	res := db.FindOne(ctx, bson.D{{"_id", guid}}).Decode(user)
-	if res != nil {
-		return nil
+	err := db.FindOne(ctx, bson.D{{"_id", guid}}).Decode(user)
+	if err != nil {
+		return nil, err
 	}
-	return user
+	return user, nil
 }
 
-func (database *Database) UpdateUserToken(ctx context.Context, guid, value string) error {
+func (database *Database) UpdateUserToken(ctx context.Context, guid primitive.ObjectID, value string) error {
 	db := database.DB.Collection(table.User)
 	if value == "" {
 		value = uuid.Must(uuid.NewV4(), nil).String()
 	}
-	_, error := db.UpdateOne(ctx, bson.D{{"_id", guid}}, bson.D{{"$set", bson.M{"token": value, "last_mod_time": time.Now()}}})
+	_, error := db.UpdateOne(ctx, bson.D{{"_id", guid}}, bson.D{{"$set", bson.M{"token": value}}})
 	return error
 }
 
-func (database *Database) UpdateUserPassword(ctx context.Context, guid, value string) error {
+func (database *Database) UpdateUserPassword(ctx context.Context, guid primitive.ObjectID, value string) error {
 	db := database.DB.Collection(table.User)
 	if value == "" {
 		value = uuid.Must(uuid.NewV4(), nil).String()
 	}
-	_, error := db.UpdateOne(ctx, bson.D{{"_id", guid}}, bson.D{{"$set", bson.M{"password": value, "last_mod_time": time.Now()}}})
+	_, error := db.UpdateOne(ctx, bson.D{{"_id", guid}}, bson.D{{"$set", bson.M{"password": value}}})
 	return error
 }
 
-func (database *Database) UpdateUserPhone(ctx context.Context, guid, value string) error {
+func (database *Database) UpdateUserPhone(ctx context.Context, guid primitive.ObjectID, value string) error {
 	db := database.DB.Collection(table.User)
-	_, error := db.UpdateOne(ctx, bson.D{{"_id", guid}}, bson.D{{"$set", bson.M{"phone": value, "last_mod_time": time.Now()}}})
+	_, error := db.UpdateOne(ctx, bson.D{{"_id", guid}}, bson.D{{"$set", bson.M{"phone": value}}})
 	return error
 }
 
-func (database *Database) GetUserByToken(ctx context.Context, token string) *model.User {
+func (database *Database) GetUserByToken(ctx context.Context, token string) (*model.User, error) {
 	db := database.DB.Collection(table.User)
 	user := new(model.User)
 	res := db.FindOne(ctx, bson.D{{"token", token}}).Decode(user)
 	if res != nil {
-		return nil
+		return nil, res
 	}
-	return user
+	return user, nil
 }
 
-func (database *Database) GetUserByPhone(ctx context.Context, phone string) *model.User {
+func (database *Database) GetUserByPhone(ctx context.Context, phone string) (*model.User, error) {
 	db := database.DB.Collection(table.User)
 	user := new(model.User)
 	opt := options.FindOneOptions{}
 	res := db.FindOne(ctx, bson.D{{"phone", phone}}, &opt).Decode(user)
 	if res != nil {
-		return nil
+		return nil, res
 	}
-	return user
+	return user, nil
 }
 
 func (database *Database) LoadUser(ctx context.Context, opt *option) ([]*model.User, int64, error) {
 	db := database.DB.Collection(table.User)
 	need := make(map[OptionKey]string)
-	need[OptInstitutionId] = "ref_institution_list"
 	need[OptName] = "name"
 	need[OptPhone] = "phone"
-	need[OptGuid] = "_id"
+	need[OptID] = "_id"
 	need[OptIDCard] = "id_card"
 	need[OptSex] = "sex"
 	need[OptBirthDate] = "birth_date"
 	need[OptToken] = "token"
 	need[OptDisable] = "disable"
+	need[OptHidden] = "hidden"
 	need[OptStatus] = "status"
-	need[OptCreateTime] = "create_time"
-	need[OptLastModTime] = "last_mod_time"
 	query, option := opt.toFind(need)
 	option.Projection = bson.M{"token": 0, "password": 0}
 	count, err := db.CountDocuments(ctx, query)

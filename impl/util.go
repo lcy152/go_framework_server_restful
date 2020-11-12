@@ -5,9 +5,14 @@ import (
 	service "tumor_server/service"
 
 	uuid "github.com/satori/go.uuid"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-func NewUUID() string {
+func NewUUID() primitive.ObjectID {
+	return primitive.NewObjectID()
+}
+
+func NewUUIDStr() string {
 	return uuid.Must(uuid.NewV4(), nil).String()
 }
 

@@ -25,6 +25,7 @@ type RabbitMQ struct {
 	Mqurl        string
 	QueueConfig  map[string]interface{}
 	Wg           sync.WaitGroup
+	sc           *Container
 }
 
 func NewRabbitMQ(sc *Container, url string) *RabbitMQ {
@@ -66,9 +67,9 @@ func (r *RabbitMQ) Connect() {
 	}
 	r.ExchangeMap = make(map[string]*Exchange)
 	for _, v := range insList {
-		ex := &Exchange{Name: v.Guid}
+		ex := &Exchange{Name: v.ID.String()}
 		ex.Done = make(chan int, 1)
-		r.ExchangeMap[v.Guid] = ex
+		r.ExchangeMap[v.ID.String()] = ex
 	}
 	for _, v := range r.ExchangeMap {
 		err := r.channel.ExchangeDeclare(

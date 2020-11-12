@@ -3,6 +3,7 @@ package impl
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"time"
 	"tumor_server/db"
 	framework "tumor_server/framework"
@@ -10,58 +11,64 @@ import (
 	"tumor_server/model"
 	service "tumor_server/service"
 
-	uuid "github.com/satori/go.uuid"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func AddSingleChatMessage(c *framework.Context) {
 	defer PanicHandler(c)
 	data := &model.ChatMessage{}
 	CheckHandler(!c.ParseBody(data), message.JsonParseError)
-	CheckHandler(data.ReceiverGuid == "" || data.Data == "", message.JsonParseError)
 	userInfo := GetContextUserInfo(c)
 	sc := service.GetContainerInstance()
-	data.CreateTime = time.Now()
-	data.SenderGuid = userInfo.User.Guid
+	data.Sender = userInfo.User.ID
 	data.SenderName = userInfo.User.Name
-	data.Guid = uuid.Must(uuid.NewV4(), nil).String()
+	data.ID = NewUUID()
+	data.CreateTime = time.Now()
 	err := sc.DB.AddSingleChat(context.TODO(), data)
 	CheckHandler(err, message.AddError)
 	jsonStr, _ := json.Marshal(data)
-	service.SendSingleMessage(data.ReceiverGuid, string(jsonStr))
+	service.SendSingleMessage(data.Receiver.String(), string(jsonStr))
 	HttpReponseHandler(c, data)
 }
 
 func DeleteSingleChatMessage(c *framework.Context) {
 	defer PanicHandler(c)
 	id := c.GetParam("id")
+	oid, _ := primitive.ObjectIDFromHex(id)
 	sc := service.GetContainerInstance()
-	info := sc.DB.GetSingleChat(context.TODO(), id)
+	info := sc.DB.GetSingleChat(context.TODO(), oid)
 	CheckHandler(info == nil, message.GetError)
 	CheckHandler(time.Now().Unix()-info.CreateTime.Unix() > 120, message.ExpiredError)
-	err := sc.DB.DeleteSingleChat(context.TODO(), id)
+	err := sc.DB.DeleteSingleChat(context.TODO(), oid)
 	CheckHandler(err, message.DeleteError)
 	HttpReponseHandler(c, nil)
 }
 
 func LoadSingleChatMessage(c *framework.Context) {
 	defer PanicHandler(c)
-	var data = &struct {
-		Receiver  string `json:"receiver"`
-		PageIndex int64  `json:"page_index"`
-		PageSize  int64  `json:"page_size"`
-		Ascend    bool   `json:"ascend_sort"`
-		Search    string `json:"search"`
-	}{
-		PageSize: 20,
-	}
-	CheckHandler(!c.ParseBody(data), message.JsonParseError)
+	pageSizeStr := c.GetURLParam("page_size")
+	pageIndexStr := c.GetURLParam("page_index")
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	CheckHandler(err, message.RequestDataError)
+	pageIndex, err := strconv.Atoi(pageIndexStr)
+	CheckHandler(err, message.RequestDataError)
+	receiver := c.GetURLParam("receiver")
+
 	userInfo := GetContextUserInfo(c)
 	sc := service.GetContainerInstance()
 	opt := db.NewOptions()
-	opt.PageIndex = data.PageIndex
-	opt.PageSize = data.PageSize
-	opt.Ascend = data.Ascend
-	sgList, err := sc.DB.LoadSingleChat(context.TODO(), opt, data.Receiver, userInfo.User.Guid, data.Search)
+	opt.PageIndex = pageIndex
+	opt.PageSize = pageSize
+
+	query1 := map[db.OptionKey]interface{}{}
+	query1[db.OptSender] = userInfo.User.ID
+	query1[db.OptReceiver] = receiver
+	query2 := map[db.OptionKey]interface{}{}
+	query2[db.OptSender] = receiver
+	query2[db.OptReceiver] = userInfo.User.ID
+	opt.OR = append(opt.OR, query1, query2)
+
+	sgList, err := sc.DB.LoadSingleChat(context.TODO(), opt)
 	CheckHandler(err, message.GetError)
 	HttpReponseHandler(c, sgList)
 }
@@ -72,28 +79,19 @@ func AddGroupChatMessage(c *framework.Context) {
 	CheckHandler(!c.ParseBody(data), message.JsonParseError)
 	userInfo := GetContextUserInfo(c)
 	sc := service.GetContainerInstance()
-	group := sc.DB.GetUserGroup(context.TODO(), data.GroupGuid)
-	CheckHandler(group == nil, message.GetError)
-	hasAuth := false
-	for _, v := range group.Member {
-		if v == userInfo.User.Guid {
-			hasAuth = true
-			break
-		}
-	}
-	CheckHandler(!hasAuth, message.AuthorityError)
 	data.CreateTime = time.Now()
-	data.SenderGuid = userInfo.User.Guid
+	data.Sender = userInfo.User.ID
 	data.SenderName = userInfo.User.Name
-	data.Guid = uuid.Must(uuid.NewV4(), nil).String()
+	data.ID = NewUUID()
 	err := sc.DB.AddGroupChat(context.TODO(), data)
 	CheckHandler(err, message.AddError)
+	utuList, err := sc.DB.LoadUserToUserGroupUser(context.TODO(), data.Group)
 	jsonStr, _ := json.Marshal(data)
-	for _, v := range group.Member {
-		if data.SenderGuid == v {
+	for _, v := range utuList {
+		if data.Sender == v.User {
 			continue
 		}
-		service.SendGroupMessage(v, string(jsonStr))
+		service.SendGroupMessage(v.User.String(), string(jsonStr))
 	}
 	HttpReponseHandler(c, data)
 }
@@ -101,36 +99,35 @@ func AddGroupChatMessage(c *framework.Context) {
 func DeleteGroupChatMessage(c *framework.Context) {
 	defer PanicHandler(c)
 	id := c.GetParam("id")
+	oid, _ := primitive.ObjectIDFromHex(id)
 	sc := service.GetContainerInstance()
-	info := sc.DB.GetGroupChat(context.TODO(), id)
-	CheckHandler(info == nil, message.GetError)
+	info, err := sc.DB.GetGroupChat(context.TODO(), oid)
+	CheckHandler(err, message.GetError)
 	CheckHandler(time.Now().Unix()-info.CreateTime.Unix() > 120, message.ExpiredError)
-	err := sc.DB.DeleteGroupChat(context.TODO(), id)
+	err = sc.DB.DeleteGroupChat(context.TODO(), oid)
 	CheckHandler(err, message.DeleteError)
 	HttpReponseHandler(c, nil)
 }
 
 func LoadGroupChatMessage(c *framework.Context) {
 	defer PanicHandler(c)
-	var data = &struct {
-		GroupGuid string `json:"group_guid"`
-		PageIndex int64  `json:"page_index"`
-		PageSize  int64  `json:"page_size"`
-		Ascend    bool   `json:"ascend_sort"`
-		Search    string `json:"search"`
-	}{
-		PageSize: 20,
-	}
-	CheckHandler(!c.ParseBody(data), message.JsonParseError)
+	pageSizeStr := c.GetURLParam("page_size")
+	pageIndexStr := c.GetURLParam("page_index")
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	CheckHandler(err, message.RequestDataError)
+	pageIndex, err := strconv.Atoi(pageIndexStr)
+	CheckHandler(err, message.RequestDataError)
+	search := c.GetURLParam("search")
+	group := c.GetURLParam("group")
+
 	opt := db.NewOptions()
-	opt.Search[db.OptGroupId] = data.GroupGuid
-	if data.Search != "" {
-		opt.Search[db.OptData] = data.Search
+	opt.EQ[db.OptGroup] = group
+	if search != "" {
+		opt.EQ[db.OptType] = "text"
+		opt.Match[db.OptData] = search
 	}
-	opt.PageIndex = data.PageIndex
-	opt.PageSize = data.PageSize
-	opt.Ascend = data.Ascend
-	opt.Sort = append(opt.Sort, db.OptCreateTime)
+	opt.PageIndex = pageIndex
+	opt.PageSize = pageSize
 	sc := service.GetContainerInstance()
 	sgList, err := sc.DB.LoadGroupChat(context.TODO(), opt)
 	CheckHandler(err, message.GetError)
@@ -141,41 +138,37 @@ func GetUserChatHistory(c *framework.Context) {
 	defer PanicHandler(c)
 	userInfo := GetContextUserInfo(c)
 	sc := service.GetContainerInstance()
-	opt := db.NewOptions()
-	opt.Search[db.OptMember] = userInfo.User.Guid
-	ugList, _, err := sc.DB.LoadUserGroup(context.TODO(), opt)
+	ugList, err := sc.DB.LoadUserToUserGroupUser(context.TODO(), userInfo.User.ID)
 	CheckHandler(err, message.GetError)
-	friendList := []*model.User{}
-	for _, v := range userInfo.User.FriendList {
-		user := sc.DB.GetUser(context.TODO(), v)
-		if user != nil {
-			friendList = append(friendList, user)
-		}
-	}
+	friendList, err := sc.DB.LoadUserToUserUser(context.TODO(), userInfo.User.ID)
 	var Message []*model.ChatMessage
 	for _, v := range friendList {
 		opt := db.NewOptions()
 		opt.PageIndex = 0
 		opt.PageSize = 1
-		opt.Ascend = false
-		megList, err := sc.DB.LoadSingleChat(context.TODO(), opt, v.Guid, userInfo.User.Guid, "")
-		if err != nil || len(megList) == 0 {
-			continue
+		query1 := map[db.OptionKey]interface{}{}
+		query1[db.OptSender] = userInfo.User.ID
+		query1[db.OptReceiver] = v
+		query2 := map[db.OptionKey]interface{}{}
+		query2[db.OptSender] = v
+		query2[db.OptReceiver] = userInfo.User.ID
+		opt.OR = append(opt.OR, query1, query2)
+		opt.Sort = []db.SortOption{{Key: db.OptID, Ascend: false}}
+		sgList, _ := sc.DB.LoadSingleChat(context.TODO(), opt)
+		if len(sgList) > 0 {
+			Message = append(Message, sgList[0])
 		}
-		Message = append(Message, megList[0])
 	}
 	for _, v := range ugList {
 		opt := db.NewOptions()
-		opt.Search[db.OptGroupId] = v.Guid
+		opt.EQ[db.OptGroup] = v.ID
 		opt.PageIndex = 0
 		opt.PageSize = 1
-		opt.Ascend = false
-		opt.Sort = append(opt.Sort, db.OptCreateTime)
-		megList, err := sc.DB.LoadGroupChat(context.TODO(), opt)
-		if err != nil || len(megList) == 0 {
-			continue
+		opt.Sort = []db.SortOption{{Key: db.OptID, Ascend: false}}
+		megList, _ := sc.DB.LoadGroupChat(context.TODO(), opt)
+		if len(megList) > 0 {
+			Message = append(Message, megList[0])
 		}
-		Message = append(Message, megList[0])
 	}
 	HttpReponseHandler(c, Message)
 }

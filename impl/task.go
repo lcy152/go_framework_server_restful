@@ -7,13 +7,17 @@ import (
 	message "tumor_server/message"
 	"tumor_server/model"
 	service "tumor_server/service"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func GetTask(c *framework.Context) {
 	defer PanicHandler(c)
 	id := c.GetParam("id")
+	oid, _ := primitive.ObjectIDFromHex(id)
 	sc := service.GetContainerInstance()
-	task := sc.DB.GetTask(context.TODO(), id)
+	task, err := sc.DB.GetTask(context.TODO(), oid)
+	CheckHandler(err, message.GetError)
 	HttpReponseHandler(c, task)
 }
 
@@ -22,11 +26,12 @@ func EditTask(c *framework.Context) {
 	data := &model.Task{}
 	CheckHandler(!c.ParseBody(data), message.JsonParseError)
 	sc := service.GetContainerInstance()
-	dbData := sc.DB.GetTask(context.TODO(), data.Guid)
+	dbData, err := sc.DB.GetTask(context.TODO(), data.ID)
 	CheckHandler(!c.ParseBody(dbData), message.JsonParseError)
-	err := sc.DB.UpdateTask(context.TODO(), dbData)
+	CheckHandler(err, message.GetError)
+	err = sc.DB.UpdateTask(context.TODO(), dbData)
 	CheckHandler(err, message.UpdateError)
 	msgByte, _ := json.Marshal(dbData)
-	service.PublishToMQ(dbData.InstitutionId, model.MQTask, msgByte)
+	service.PublishToMQ(dbData.Institution.String(), model.MQTask, msgByte)
 	HttpReponseHandler(c, nil)
 }

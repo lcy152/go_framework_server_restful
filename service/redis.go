@@ -16,7 +16,7 @@ func UpdateUser(ctx context.Context, user *model.User) error {
 	if err != nil {
 		return err
 	}
-	err = sc.RedisService.DeleteKey(user.Guid)
+	err = sc.RedisService.DeleteKey(user.ID.String())
 	if err != nil {
 		return err
 	}

@@ -3,69 +3,55 @@ package impl
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"time"
 	"tumor_server/db"
 	framework "tumor_server/framework"
 	message "tumor_server/message"
 	"tumor_server/model"
 	service "tumor_server/service"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func AddInstitution(c *framework.Context) {
 	defer PanicHandler(c)
 	data := &model.Institution{}
 	CheckHandler(!c.ParseBody(data), message.JsonParseError)
-
 	userInfo := GetContextUserInfo(c)
 	sc := service.GetContainerInstance()
 	session, ctx, err := sc.DB.StartSession()
 	CheckHandler(err, message.HttpError)
-	defer func() {
-		sc.DB.EndSession(session)
-		ctx.AbortTransaction(ctx)
-	}()
-	ctx.StartTransaction()
-
+	defer session.Close()
 	tn := time.Now()
-	if len(data.Manager) == 0 {
-		data.Manager = []string{userInfo.User.Guid}
-	}
-	data.Guid = NewUUID()
+	data.ID = NewUUID()
 	data.CreateTime = tn
-	data.Creator = userInfo.User.Guid
+	data.Creator = userInfo.User.ID
 	err = sc.DB.AddInstitution(ctx, data)
 	CheckHandler(err, message.AddError)
-
-	userRefIns := &model.UserRouter{
-		Guid:            NewUUID(),
-		InstitutionId:   data.Guid,
+	userRefIns := &model.UserToInstitution{
+		ID:              NewUUID(),
+		Institution:     data.ID,
 		InstitutionName: data.Name,
-		UserGuid:        userInfo.User.Guid,
-		Creator:         userInfo.User.Guid,
-		LastOperator:    userInfo.User.Guid,
-		CreatedTime:     time.Now(),
-		LastModTime:     time.Now(),
+		User:            userInfo.User.ID,
+		UserName:        userInfo.User.Name,
 	}
-	opt := db.NewOptions()
-	opt.Search[db.OptUserGuid] = userInfo.User.Guid
-	opt.Search[db.OptCurrent] = true
-	urList := sc.DB.LoadUserRouter(context.TODO(), opt)
-	if len(urList) == 0 {
-		userRefIns.IsCurrent = true
-	}
-	err = sc.DB.AddUserRouter(ctx, userRefIns)
+	err = sc.DB.AddUserToInstitution(ctx, userRefIns)
 	CheckHandler(err, message.AddError)
-
-	ctx.CommitTransaction(ctx)
-	sc.RabbitMQ.Connect()
+	session.Commit()
+	if sc.RabbitMQ != nil {
+		sc.RabbitMQ.Connect()
+	}
 	HttpReponseHandler(c, data)
 }
 
 func GetInstitution(c *framework.Context) {
 	defer PanicHandler(c)
 	id := c.GetParam("id")
+	oid, _ := primitive.ObjectIDFromHex(id)
 	sc := service.GetContainerInstance()
-	ins := sc.DB.GetInstitution(context.TODO(), id)
+	ins, err := sc.DB.GetInstitution(context.TODO(), oid)
+	CheckHandler(err, message.GetError)
 	CheckHandler(ins == nil, message.GetError)
 	HttpReponseHandler(c, ins)
 }
@@ -74,143 +60,78 @@ func EditInstitution(c *framework.Context) {
 	defer PanicHandler(c)
 	data := &model.Institution{}
 	CheckHandler(!c.ParseBody(data), message.JsonParseError)
-	userInfo := GetContextUserInfo(c)
 	sc := service.GetContainerInstance()
-	data = sc.DB.GetInstitution(context.TODO(), data.Guid)
-	hasAuth := false
-	for _, v := range data.Manager {
-		if v == userInfo.User.Guid {
-			hasAuth = true
-			break
-		}
-	}
-	if len(data.Manager) == 0 {
-		data.Manager = append(data.Manager, userInfo.User.Guid)
-	}
-	CheckHandler(!hasAuth, message.AuthorityError)
-	CheckHandler(!c.ParseBody(data), message.JsonParseError)
-	err := sc.DB.UpdateInstitution(context.TODO(), data)
+	ins, err := sc.DB.GetInstitution(context.TODO(), data.ID)
+	CheckHandler(err, message.GetError)
+	CheckHandler(!c.ParseBody(ins), message.JsonParseError)
+	err = sc.DB.UpdateInstitution(context.TODO(), ins)
 	CheckHandler(err, message.UpdateError)
-	service.DeleteUserTokenInfo(data.Guid)
-	HttpReponseHandler(c, data)
+	HttpReponseHandler(c, ins)
 }
 
 func DeleteInstitution(c *framework.Context) {
 	defer PanicHandler(c)
 	id := c.GetParam("id")
-	userInfo := GetContextUserInfo(c)
+	oid, _ := primitive.ObjectIDFromHex(id)
 	sc := service.GetContainerInstance()
-	ins := sc.DB.GetInstitution(context.TODO(), id)
-	hasAuth := false
-	for _, v := range ins.Manager {
-		if v == userInfo.User.Guid {
-			hasAuth = true
-			break
-		}
-	}
-	CheckHandler(!hasAuth, message.AuthorityError)
-	err := sc.DB.DeleteInstitution(context.TODO(), id)
+	session, ctx, err := sc.DB.StartSession()
+	CheckHandler(err, message.UnknownError)
+	defer session.Close()
+	err = sc.DB.DeleteInstitution(ctx, oid)
 	CheckHandler(err, message.DeleteError)
+	err = sc.DB.DeleteUserToInstitutionInstitution(ctx, oid)
+	CheckHandler(err, message.DeleteError)
+	session.Commit()
 	HttpReponseHandler(c, nil)
 }
 
 func LoadInstitution(c *framework.Context) {
 	defer PanicHandler(c)
-	var data = struct {
-		TimeStart  int64  `json:"time_start"`
-		TimeEnd    int64  `json:"time_end"`
-		PageIndex  int64  `json:"page_index"`
-		PageSize   int64  `json:"page_size"`
-		AscendSort bool   `json:"ascend_sort"`
-		SortOption string `json:"sort_option"`
-		Search     string `json:"search"`
-	}{
-		PageSize:   50,
-		SortOption: "created_time",
-	}
-	CheckHandler(!c.ParseBody(data), message.JsonParseError)
-	option := db.NewOptions()
-	option.TimeKey = db.OptCreateTime
-	option.TimeStart = data.TimeStart
-	option.TimeEnd = data.TimeEnd
-	option.PageSize = data.PageSize
-	option.PageIndex = data.PageIndex
-	option.Ascend = data.AscendSort
-	if data.Search != "" {
-		option.Search[db.OptInstitutionId] = data.Search
-		option.Search[db.OptInstitutionName] = data.Search
-		option.Search[db.OptCode] = data.Search
-		option.Search[db.OptAddress] = data.Search
-		option.Regex[db.OptInstitutionId] = true
-		option.Search[db.OptInstitutionName] = data.Search
-		option.Search[db.OptCode] = data.Search
-		option.Regex[db.OptAddress] = true
-	}
-	switch data.SortOption {
-	case "created_time":
-		option.Sort = append(option.Sort, db.OptCreateTime)
-	case "guid":
-		option.Sort = append(option.Sort, db.OptGuid)
-	case "name":
-		option.Sort = append(option.Sort, db.OptName)
-	default:
-		option.Sort = append(option.Sort, db.OptCreateTime)
-	}
-	sc := service.GetContainerInstance()
-	insList, _, err := sc.DB.LoadInstitution(context.TODO(), option)
-	CheckHandler(err, message.GetError)
-	HttpReponseHandler(c, insList)
-}
+	pageSizeStr := c.GetURLParam("page_size")
+	pageIndexStr := c.GetURLParam("page_index")
+	search := c.GetURLParam("search")
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	CheckHandler(err, message.RequestDataError)
+	pageIndex, err := strconv.Atoi(pageIndexStr)
+	CheckHandler(err, message.RequestDataError)
 
-func LoadUserInstitution(c *framework.Context) {
-	defer PanicHandler(c)
-	userInfo := GetContextUserInfo(c)
-	sc := service.GetContainerInstance()
-	insList := []*model.Institution{}
-	opt := db.NewOptions()
-	opt.Search[db.OptUserGuid] = userInfo.User.Guid
-	urList := sc.DB.LoadUserRouter(context.TODO(), opt)
-	for _, v := range urList {
-		refIns := sc.DB.GetUserRouter(context.TODO(), v.InstitutionId)
-		if refIns == nil {
-			continue
-		}
-		ins := sc.DB.GetInstitution(context.TODO(), refIns.Guid)
-		if ins != nil {
-			insList = append(insList, ins)
-		}
+	option := db.NewOptions()
+	option.PageSize = pageSize
+	option.PageIndex = pageIndex
+	if search != "" {
+		option.Match[db.OptName] = search
+		option.Match[db.OptCode] = search
+		option.Match[db.OptAddress] = search
 	}
-	HttpReponseHandler(c, insList)
+	sc := service.GetContainerInstance()
+	insList, count, err := sc.DB.LoadInstitution(context.TODO(), option)
+	CheckHandler(err, message.GetError)
+	HttpReponseListHandler(c, count, insList)
 }
 
 func ApplyInstitution(c *framework.Context) {
-	institutionID := c.GetParam("institution_id")
-	description := c.GetParam("description")
+	var data = &model.InstitutionApplication{}
+	CheckHandler(!c.ParseBody(data), message.JsonParseError)
 	userInfo := GetContextUserInfo(c)
 	sc := service.GetContainerInstance()
-	institution := sc.DB.GetInstitution(context.TODO(), institutionID)
+	institution, err := sc.DB.GetInstitution(context.TODO(), data.Institution)
 	CheckHandler(institution == nil, message.GetError)
 	option := db.NewOptions()
-	option.Search[db.OptCreator] = userInfo.User.Guid
-	option.Search[db.OptInstitutionId] = institution.Guid
-	uaList, _, _ := sc.DB.LoadUserApplication(context.TODO(), option)
+	option.EQ[db.OptUser] = userInfo.User.ID
+	option.EQ[db.OptInstitution] = institution.ID
+	uaList, _, _ := sc.DB.LoadInstitutionApplication(context.TODO(), option)
 	for _, v := range uaList {
 		CheckHandler(v.Status == model.ApplicationStatusWait, message.RequestRepeatError)
 	}
-	userApplication := &model.UserApplication{
-		Guid:          NewUUID(),
-		InstitutionId: institution.Guid,
-		Type:          model.ApplicationTypeApplyInstitution,
-		Status:        model.ApplicationStatusWait,
-		Creator:       userInfo.User.Guid,
-		CreateTime:    time.Now(),
-		Description:   description,
-	}
-	err := sc.DB.AddUserApplication(context.TODO(), userApplication)
+	err = sc.DB.AddInstitutionApplication(context.TODO(), data)
 	CheckHandler(err, message.AddError)
-	for _, v := range institution.Manager {
-		jsonStr, _ := json.Marshal(userApplication)
-		service.SendInstitutionMessage(v, string(jsonStr))
+	opt := db.NewOptions()
+	opt.EQ[db.OptInstitution] = data.Institution
+	opt.EQ[db.OptManager] = true
+	urList, err := sc.DB.LoadUserToInstitution(context.TODO(), opt)
+	for _, v := range urList {
+		jsonStr, _ := json.Marshal(data)
+		service.SendInstitutionMessage(v.User.String(), string(jsonStr))
 	}
 	HttpReponseHandler(c, nil)
 }
@@ -218,134 +139,98 @@ func ApplyInstitution(c *framework.Context) {
 func InstitutionUserList(c *framework.Context) {
 	defer PanicHandler(c)
 	institutionID := c.GetParam("institution_id")
-
-	userInfo := GetContextUserInfo(c)
+	oid, _ := primitive.ObjectIDFromHex(institutionID)
 	sc := service.GetContainerInstance()
-	opt := db.NewOptions()
-	opt.Search[db.OptInstitutionId] = institutionID
-	urList := sc.DB.LoadUserRouter(context.TODO(), opt)
-	CheckHandler(len(urList) == 0, message.AuthorityError)
-	list := []*model.User{}
-	in := true
-	for _, v := range urList {
-		user := sc.DB.GetUser(context.TODO(), v.UserGuid)
-		if user == nil {
-			continue
-		}
-		if user.Guid == userInfo.User.Guid {
-			in = false
-		}
-		list = append(list, user)
-	}
-	CheckHandler(in, message.GetError)
-	HttpReponseHandler(c, list)
+	urList, err := sc.DB.LoadUserToInstitutionInstitution(context.TODO(), oid)
+	CheckHandler(err, message.GetListError)
+	HttpReponseHandler(c, urList)
 }
 
 func ApproveInstitution(c *framework.Context) {
 	defer PanicHandler(c)
 	id := c.GetParam("id")
-
-	userInfo := GetContextUserInfo(c)
+	oid, _ := primitive.ObjectIDFromHex(id)
 	sc := service.GetContainerInstance()
 	session, ctx, err := sc.DB.StartSession()
 	CheckHandler(err, message.HttpError)
-	defer func() {
-		sc.DB.EndSession(session)
-		ctx.AbortTransaction(ctx)
-	}()
-	ctx.StartTransaction()
-
-	op := sc.DB.GetUserApplication(ctx, id)
-	CheckHandler(op == nil, message.GetError)
-
-	institution := sc.DB.GetInstitution(context.TODO(), op.InstitutionId)
-	CheckHandler(institution == nil, message.GetError)
-	hasAuth := false
-	for _, v := range institution.Manager {
-		if userInfo.User.Guid == v {
-			hasAuth = true
-			break
-		}
-	}
-	CheckHandler(!hasAuth, message.AuthorityError)
-
-	user := sc.DB.GetUser(context.TODO(), op.Creator)
-	CheckHandler(user == nil, message.FindUserError)
-
-	userRefIns := &model.UserRouter{
-		Guid:            NewUUID(),
-		InstitutionId:   institution.Guid,
-		InstitutionName: institution.Name,
-		Creator:         user.Guid,
-		LastOperator:    user.Guid,
-		CreatedTime:     time.Now(),
-		LastModTime:     time.Now(),
-	}
-	opt := db.NewOptions()
-	opt.Search[db.OptUserGuid] = user.Guid
-	opt.Search[db.OptCurrent] = true
-	urList := sc.DB.LoadUserRouter(context.TODO(), opt)
-	if len(urList) == 0 {
-		userRefIns.IsCurrent = true
-	}
-	err = sc.DB.AddUserRouter(ctx, userRefIns)
+	defer session.Close()
+	op, err := sc.DB.GetInstitutionApplication(ctx, oid)
+	CheckHandler(err, message.GetError)
+	err = sc.DB.AddUserToInstitution(ctx, op.UserToInstitution)
 	CheckHandler(err, message.AddError)
-
 	op.Status = model.ApplicationStatusApprove
-	err = sc.DB.UpdateUserApplication(ctx, op)
+	err = sc.DB.UpdateInstitutionApplication(ctx, op)
 	CheckHandler(err, message.UpdateError)
-
-	ctx.CommitTransaction(ctx)
+	session.Commit()
 	jsonStr, _ := json.Marshal(op)
-	service.SendInstitutionMessage(op.Creator, string(jsonStr))
+	service.SendInstitutionMessage(op.User.String(), string(jsonStr))
 	HttpReponseHandler(c, nil)
 }
 
 func RejectInstitution(c *framework.Context) {
 	defer PanicHandler(c)
 	id := c.GetParam("id")
-
-	userInfo := GetContextUserInfo(c)
+	oid, _ := primitive.ObjectIDFromHex(id)
 	sc := service.GetContainerInstance()
-	op := sc.DB.GetUserApplication(context.TODO(), id)
-	CheckHandler(op == nil, message.GetError)
-	institution := sc.DB.GetInstitution(context.TODO(), op.InstitutionId)
-	CheckHandler(institution == nil, message.GetError)
-	hasAuth := false
-	for _, v := range institution.Manager {
-		if userInfo.User.Guid == v {
-			hasAuth = true
-			break
-		}
-	}
-	CheckHandler(!hasAuth, message.AuthorityError)
+	op, err := sc.DB.GetInstitutionApplication(context.TODO(), oid)
+	CheckHandler(err, message.GetError)
 	op.Status = model.ApplicationStatusReject
-	err := sc.DB.UpdateUserApplication(context.TODO(), op)
+	err = sc.DB.UpdateInstitutionApplication(context.TODO(), op)
 	CheckHandler(err, message.UpdateError)
 	jsonStr, _ := json.Marshal(op)
-	service.SendInstitutionMessage(op.Creator, string(jsonStr))
+	service.SendInstitutionMessage(op.User.String(), string(jsonStr))
 	HttpReponseHandler(c, nil)
 }
 
-func GetInstitutionApply(c *framework.Context) {
+func InstitutionApply(c *framework.Context) {
 	defer PanicHandler(c)
 	institutionID := c.GetParam("institution_id")
+	oid, _ := primitive.ObjectIDFromHex(institutionID)
 	state := c.GetParam("state")
-	userInfo := GetContextUserInfo(c)
 	sc := service.GetContainerInstance()
-	ins := sc.DB.GetInstitution(context.TODO(), institutionID)
-	CheckHandler(ins == nil, message.GetError)
-	for _, v := range ins.Manager {
-		if v == userInfo.User.Guid {
-			opt := db.NewOptions()
-			opt.Search[db.OptInstitutionId] = institutionID
-			opt.Search[db.OptType] = model.ApplicationTypeApplyInstitution
-			opt.Search[db.OptStatus] = state
-			opList, _, err := sc.DB.LoadUserApplication(context.TODO(), opt)
-			CheckHandler(err, message.GetError)
-			HttpReponseHandler(c, opList)
-			return
-		}
+	opt := db.NewOptions()
+	opt.EQ[db.OptInstitution] = oid
+	if state != "" {
+		opt.EQ[db.OptStatus] = state
 	}
-	CheckHandler(true, message.AuthorityError)
+	opList, _, err := sc.DB.LoadInstitutionApplication(context.TODO(), opt)
+	CheckHandler(err, message.GetListError)
+	HttpReponseHandler(c, opList)
+}
+
+func AddInstitutionUser(c *framework.Context) {
+	defer PanicHandler(c)
+	data := []*model.UserToInstitution{}
+	CheckHandler(!c.ParseBody(&data), message.JsonParseError)
+	sc := service.GetContainerInstance()
+	session, ctx, err := sc.DB.StartSession()
+	CheckHandler(err, message.HttpError)
+	defer session.Close()
+	for _, v := range data {
+		v.ID = NewUUID()
+		err = sc.DB.AddUserToInstitution(ctx, v)
+		CheckHandler(err, message.AddError)
+	}
+	session.Commit()
+	HttpReponseHandler(c, data)
+}
+
+func EditInstitutionUser(c *framework.Context) {
+	defer PanicHandler(c)
+	data := &model.UserToInstitution{}
+	CheckHandler(!c.ParseBody(data), message.JsonParseError)
+	sc := service.GetContainerInstance()
+	err := sc.DB.UpdateUserToInstitution(context.TODO(), data)
+	CheckHandler(err, message.UpdateError)
+	HttpReponseHandler(c, data)
+}
+
+func DeleteInstitutionUser(c *framework.Context) {
+	defer PanicHandler(c)
+	id := c.GetParam("id")
+	oid, _ := primitive.ObjectIDFromHex(id)
+	sc := service.GetContainerInstance()
+	err := sc.DB.DeleteUserToInstitution(context.TODO(), oid)
+	CheckHandler(err, message.UpdateError)
+	HttpReponseHandler(c, nil)
 }

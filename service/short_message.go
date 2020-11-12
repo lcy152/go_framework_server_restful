@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math/rand"
+	"strconv"
 	"time"
 	"tumor_server/message"
 )
@@ -16,26 +17,26 @@ type ShortMessage struct {
 	Phone string `json:"phone"`
 	Time  int64  `json:"time"`
 	Count int64  `json:"count"`
-	Code  int64  `json:"code"`
+	Code  string `json:"code"`
 }
 
-func GenerateCode(number int) int64 {
-	base := 0
+func GenerateCode(number int) string {
+	base := 9
 	for i := 1; i < number; i++ {
-		base = base * 10
+		base = base*10 + 9
 	}
 	rand.Seed(time.Now().UnixNano())
-	code := 1000 + rand.Intn(9000)
-	return int64(code)
+	code := rand.Intn(base)
+	return strconv.Itoa(code)
 }
 
 func NewShortMessageKey(key string) string {
 	return ShortMessageTAG + key
 }
 
-func ShortMessageValidate(phone string, code int64) bool {
+func ShortMessageValidate(phone string, code string) bool {
 	sc := GetContainerInstance()
-	if code == 0 {
+	if code == "" {
 		return false
 	}
 	codeInfo, err := GetRedisShortMessage(phone)
@@ -80,7 +81,7 @@ func GetRedisShortMessage(key string) (*ShortMessage, error) {
 	return info, nil
 }
 
-func StoreShortMessage(phone string, code int64) error {
+func StoreShortMessage(phone string, code string) error {
 	sc := GetContainerInstance()
 	tn := time.Now().Unix()
 	codeInfo, err := GetRedisShortMessage(phone)

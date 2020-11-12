@@ -3,6 +3,7 @@ package impl
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"time"
 	"tumor_server/db"
 	framework "tumor_server/framework"
@@ -10,7 +11,7 @@ import (
 	"tumor_server/model"
 	service "tumor_server/service"
 
-	uuid "github.com/satori/go.uuid"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func AddUser(c *framework.Context) {
@@ -19,7 +20,7 @@ func AddUser(c *framework.Context) {
 	CheckHandler(!c.ParseBody(data), message.JsonParseError)
 	CheckHandler(data.Phone == "", message.RequestDataError)
 	tn := time.Now()
-	data.Guid = uuid.Must(uuid.NewV4(), nil).String()
+	data.ID = NewUUID()
 	data.CreateTime = tn
 	data.LastModTime = tn
 	sc := service.GetContainerInstance()
@@ -37,54 +38,37 @@ func GetUser(c *framework.Context) {
 
 func SearchUser(c *framework.Context) {
 	defer PanicHandler(c)
-	var data = &struct {
-		Search     string `json:"search"`
-		PageIndex  int64  `json:"page_index"`
-		PageSize   int64  `json:"page_size"`
-		AscendSort bool   `json:"ascend_sort"`
-		SortOption string `json:"sort_option"`
-	}{PageIndex: 0, PageSize: 20}
-	CheckHandler(!c.ParseBody(data), message.JsonParseError)
+	pageSizeStr := c.GetURLParam("page_size")
+	pageIndexStr := c.GetURLParam("page_index")
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	CheckHandler(err, message.RequestDataError)
+	pageIndex, err := strconv.Atoi(pageIndexStr)
+	CheckHandler(err, message.RequestDataError)
+	receiver := c.GetURLParam("receiver")
 	option := db.NewOptions()
-	option.TimeKey = db.OptCreateTime
-	option.Search[db.OptDisable] = false
-	option.Search[db.OptName] = data.Search
-	option.Search[db.OptPhone] = data.Search
-	option.Search[db.OptIDCard] = data.Search
-	option.Regex[db.OptName] = true
-	option.Regex[db.OptPhone] = true
-	option.Regex[db.OptIDCard] = true
-	option.PageIndex = data.PageIndex
-	option.PageSize = data.PageSize
-	option.Ascend = data.AscendSort
-	switch data.SortOption {
-	case "created_time":
-		option.Sort = append(option.Sort, db.OptCreateTime)
-	case "guid":
-		option.Sort = append(option.Sort, db.OptGuid)
-	case "name":
-		option.Sort = append(option.Sort, db.OptName)
-	case "phone":
-		option.Sort = append(option.Sort, db.OptPhone)
-	default:
-		option.Sort = append(option.Sort, db.OptCreateTime)
-	}
+	option.EQ[db.OptHidden] = false
+	option.Match[db.OptName] = receiver
+	option.Match[db.OptPhone] = receiver
+	option.Match[db.OptIDCard] = receiver
+	option.PageIndex = pageIndex
+	option.PageSize = pageSize
 	sc := service.GetContainerInstance()
-	lsit, _, err := sc.DB.LoadUser(context.TODO(), option)
-	CheckHandler(err, message.GetError)
-	HttpReponseHandler(c, lsit)
+	lsit, count, err := sc.DB.LoadUser(context.TODO(), option)
+	CheckHandler(err, message.GetListError)
+	HttpReponseListHandler(c, count, lsit)
 }
 
 func EditUser(c *framework.Context) {
 	defer PanicHandler(c)
-	data := &model.Guid{}
+	data := &model.ID{}
 	CheckHandler(!c.ParseBody(data), message.JsonParseError)
 	sc := service.GetContainerInstance()
-	user := sc.DB.GetUser(context.TODO(), data.Guid)
+	user, err := sc.DB.GetUser(context.TODO(), data.ID)
+	CheckHandler(err, message.GetError)
 	CheckHandler(!c.ParseBody(user), message.JsonParseError)
 	CheckHandler(len(user.Photo) > 1024*1000, message.ImageSizeError)
 	CheckHandler(len(user.Qrcode) > 1024*1000, message.ImageSizeError)
-	err := service.UpdateUser(context.TODO(), user)
+	err = service.UpdateUser(context.TODO(), user)
 	CheckHandler(err, message.UpdateUserError)
 	HttpReponseHandler(c, data)
 }
@@ -100,10 +84,10 @@ func EditUserPassword(c *framework.Context) {
 	sc := service.GetContainerInstance()
 	userInfo := &service.UserTokenInfo{}
 	c.ParseExtra(userInfo)
-	user := sc.DB.GetUser(context.TODO(), userInfo.User.Guid)
-	CheckHandler(user == nil, message.FindUserError)
+	user, err := sc.DB.GetUser(context.TODO(), userInfo.User.ID)
+	CheckHandler(err, message.FindUserError)
 	CheckHandler(data.OldPassword != user.Password, message.PasswordError)
-	err := sc.DB.UpdateUserPassword(context.TODO(), userInfo.User.Guid, data.NewPassword)
+	err = sc.DB.UpdateUserPassword(context.TODO(), userInfo.User.ID, data.NewPassword)
 	CheckHandler(err, message.UpdateUserError)
 	HttpReponseHandler(c, nil)
 }
@@ -112,7 +96,7 @@ func EditUserPhone(c *framework.Context) {
 	defer PanicHandler(c)
 	data := &struct {
 		Phone string `json:"phone" bson:"phone"`
-		Code  int64  `json:"code" bson:"code"`
+		Code  string `json:"code" bson:"code"`
 	}{}
 	CheckHandler(!c.ParseBody(data), message.JsonParseError)
 	CheckHandler(len(data.Phone) < 6, message.RequestDataError)
@@ -120,100 +104,130 @@ func EditUserPhone(c *framework.Context) {
 	CheckHandler(!service.ShortMessageValidate(data.Phone, data.Code), message.ShortMessageValidateError)
 	userInfo := &service.UserTokenInfo{}
 	c.ParseExtra(userInfo)
-	err := sc.DB.UpdateUserPhone(context.TODO(), userInfo.User.Guid, data.Phone)
+	err := sc.DB.UpdateUserPhone(context.TODO(), userInfo.User.ID, data.Phone)
 	CheckHandler(err, message.UpdateUserError)
-	service.DeleteUserTokenInfo(userInfo.User.Guid)
+	service.DeleteUserTokenInfo(userInfo.User.ID.String())
 	HttpReponseHandler(c, nil)
 }
 
-func GetUserFriendList(c *framework.Context) {
+func UserFriendList(c *framework.Context) {
 	defer PanicHandler(c)
 	userInfo := GetContextUserInfo(c)
-	fList := []*model.User{}
 	sc := service.GetContainerInstance()
-	for _, v := range userInfo.User.FriendList {
-		user := sc.DB.GetUser(context.TODO(), v)
-		if user != nil {
-			fList = append(fList, user)
-		}
-	}
+	opt := db.NewOptions()
+	opt.EQ[db.OptUser] = userInfo.User.ID
+	fList, err := sc.DB.LoadUserToUser(context.TODO(), opt)
+	CheckHandler(err, message.GetListError)
 	HttpReponseHandler(c, fList)
+}
+
+func UserInstitutionList(c *framework.Context) {
+	defer PanicHandler(c)
+	userInfo := GetContextUserInfo(c)
+	sc := service.GetContainerInstance()
+	opt := db.NewOptions()
+	opt.EQ[db.OptUser] = userInfo.User.ID
+	insList, err := sc.DB.LoadUserToInstitution(context.TODO(), opt)
+	CheckHandler(err, message.GetListError)
+	institutionList := []model.Institution{}
+	for _, refIns := range insList {
+		ins, err := sc.DB.GetInstitution(context.TODO(), refIns.Institution)
+		CheckHandler(err, message.GetError)
+		institutionList = append(institutionList, *ins)
+	}
+	HttpReponseHandler(c, institutionList)
 }
 
 func AddFriend(c *framework.Context) {
 	defer PanicHandler(c)
 	data := &struct {
-		UserGuid    string `json:"user_guid" bson:"user_guid"`
-		Description string `json:"description" bson:"description"`
+		User        primitive.ObjectID `json:"user" bson:"user"`
+		Description string             `json:"description" bson:"description"`
 	}{}
 	CheckHandler(!c.ParseBody(data), message.JsonParseError)
 	userInfo := GetContextUserInfo(c)
 	sc := service.GetContainerInstance()
-	user := sc.DB.GetUser(context.TODO(), data.UserGuid)
-	CheckHandler(user == nil, message.FindUserError)
+	user, err := sc.DB.GetUser(context.TODO(), data.User)
+	CheckHandler(err, message.FindUserError)
 	option := db.NewOptions()
-	option.Search[db.OptCreator] = userInfo.User.Guid
-	option.Search[db.OptUserGuid] = user.Guid
-	option.Search[db.OptStatus] = model.ApplicationStatusWait
-	uaList, _, _ := sc.DB.LoadUserApplication(context.TODO(), option)
+	option.EQ[db.OptUser] = userInfo.User.ID
+	option.EQ[db.OptFriend] = user.ID
+	option.EQ[db.OptStatus] = model.ApplicationStatusWait
+	uaList, _ := sc.DB.LoadUserApplication(context.TODO(), option)
 	CheckHandler(len(uaList) != 0, message.RequestRepeatError)
 	userApplication := &model.UserApplication{
-		Guid:        NewUUID(),
-		UserGuid:    user.Guid,
-		Type:        model.ApplicationTypeApplyFriend,
+		ID:          NewUUID(),
+		Friend:      user.ID,
+		FriendName:  user.Name,
 		Status:      model.ApplicationStatusWait,
-		Creator:     userInfo.User.Guid,
-		CreateTime:  time.Now(),
+		User:        userInfo.User.ID,
+		UserName:    userInfo.User.Name,
 		Description: data.Description,
 	}
-	err := sc.DB.AddUserApplication(context.TODO(), userApplication)
+	err = sc.DB.AddUserApplication(context.TODO(), userApplication)
 	CheckHandler(err, message.AddError)
 	jsonStr, _ := json.Marshal(userApplication)
-	service.SendFriendMessage(userApplication.UserGuid, string(jsonStr))
+	service.SendFriendMessage(userApplication.ID.String(), string(jsonStr))
 	HttpReponseHandler(c, nil)
 }
 
 func ApproveFriend(c *framework.Context) {
 	defer PanicHandler(c)
 	id := c.GetParam("id")
+	oid, _ := primitive.ObjectIDFromHex(id)
 	sc := service.GetContainerInstance()
 	session, ctx, err := sc.DB.StartSession()
 	CheckHandler(err, message.HttpError)
-	defer func() {
-		sc.DB.EndSession(session)
-		ctx.AbortTransaction(ctx)
-	}()
-	ctx.StartTransaction()
+	defer session.Close()
 
 	userInfo := GetContextUserInfo(c)
-	op := sc.DB.GetUserApplication(ctx, id)
+	op := sc.DB.GetUserApplication(ctx, oid)
 	CheckHandler(op == nil, message.GetError)
-	CheckHandler(op.UserGuid != userInfo.User.Guid, message.AuthorityError)
-	user := userInfo.User
-	user.FriendList = append(user.FriendList, op.Creator)
-	err = service.UpdateUser(ctx, user)
-	CheckHandler(err, message.UpdateError)
+	CheckHandler(op.User != userInfo.User.ID, message.AuthorityError)
 	op.Status = model.ApplicationStatusApprove
 	err = sc.DB.UpdateUserApplication(ctx, op)
 	CheckHandler(err, message.UpdateError)
-	ctx.CommitTransaction(ctx)
+
+	utu1 := &model.UserToUser{
+		ID:         NewUUID(),
+		User:       op.User,
+		UserName:   op.UserName,
+		Friend:     op.Friend,
+		FriendName: op.FriendName,
+	}
+	err = sc.DB.AddUserToUser(ctx, utu1)
+	CheckHandler(err, message.AddError)
+	utu2 := &model.UserToUser{
+		ID:         NewUUID(),
+		User:       op.Friend,
+		UserName:   op.FriendName,
+		Friend:     op.User,
+		FriendName: op.UserName,
+	}
+	err = sc.DB.AddUserToUser(ctx, utu2)
+	CheckHandler(err, message.AddError)
+
+	session.Commit()
 	jsonStr, _ := json.Marshal(op)
-	service.SendFriendMessage(op.Creator, string(jsonStr))
+	service.SendFriendMessage(op.User.String(), string(jsonStr))
 	HttpReponseHandler(c, nil)
 }
 
 func RejectFriend(c *framework.Context) {
 	defer PanicHandler(c)
 	id := c.GetParam("id")
+	oid, _ := primitive.ObjectIDFromHex(id)
 
 	sc := service.GetContainerInstance()
 	userInfo := GetContextUserInfo(c)
-	op := sc.DB.GetUserApplication(context.TODO(), id)
+	op := sc.DB.GetUserApplication(context.TODO(), oid)
 	CheckHandler(op == nil, message.GetError)
-	CheckHandler(op.UserGuid != userInfo.User.Guid, message.AuthorityError)
+	CheckHandler(op.User != userInfo.User.ID, message.AuthorityError)
 	op.Status = model.ApplicationStatusReject
 	err := sc.DB.UpdateUserApplication(context.TODO(), op)
 	CheckHandler(err, message.UpdateError)
+	jsonStr, _ := json.Marshal(op)
+	service.SendFriendMessage(op.User.String(), string(jsonStr))
 	HttpReponseHandler(c, nil)
 }
 
@@ -222,9 +236,8 @@ func GetFriendApplicationList(c *framework.Context) {
 	sc := service.GetContainerInstance()
 	userInfo := GetContextUserInfo(c)
 	opt := db.NewOptions()
-	opt.Search[db.OptUserGuid] = userInfo.User.Guid
-	opt.Search[db.OptType] = model.ApplicationTypeApplyFriend
-	opList, _, err := sc.DB.LoadUserApplication(context.TODO(), opt)
+	opt.EQ[db.OptUser] = userInfo.User.ID
+	opList, err := sc.DB.LoadUserApplication(context.TODO(), opt)
 	CheckHandler(err, message.GetError)
 	HttpReponseHandler(c, opList)
 }
@@ -232,80 +245,76 @@ func GetFriendApplicationList(c *framework.Context) {
 func DeleteFriend(c *framework.Context) {
 	defer PanicHandler(c)
 	id := c.GetParam("id")
+	oid, _ := primitive.ObjectIDFromHex(id)
 
 	sc := service.GetContainerInstance()
 	userInfo := GetContextUserInfo(c)
 	session, ctx, err := sc.DB.StartSession()
 	CheckHandler(err, message.HttpError)
-	defer func() {
-		sc.DB.EndSession(session)
-		ctx.AbortTransaction(ctx)
-	}()
-	ctx.StartTransaction()
-
-	friendList := []string{}
-	for _, v := range userInfo.User.FriendList {
-		if v == id {
-			continue
+	defer session.Close()
+	{
+		opt := db.NewOptions()
+		opt.EQ[db.OptUser] = userInfo.User.ID
+		opt.EQ[db.OptFriend] = oid
+		utuList, err := sc.DB.LoadUserToUser(ctx, opt)
+		CheckHandler(err, message.GetListError)
+		for _, u := range utuList {
+			err := sc.DB.DeleteUserToUser(ctx, u.ID)
+			CheckHandler(err, message.DeleteError)
 		}
-		friendList = append(friendList, v)
 	}
-	err = service.UpdateUser(ctx, userInfo.User)
-	CheckHandler(err, message.UpdateError)
-
-	friend := sc.DB.GetUser(ctx, id)
-	CheckHandler(friend == nil, message.GetError)
-
-	friendList2 := []string{}
-	for _, v := range friend.FriendList {
-		if v == userInfo.User.Guid {
-			continue
+	{
+		opt := db.NewOptions()
+		opt.EQ[db.OptUser] = oid
+		opt.EQ[db.OptFriend] = userInfo.User.ID
+		utuList, err := sc.DB.LoadUserToUser(ctx, opt)
+		CheckHandler(err, message.GetListError)
+		for _, u := range utuList {
+			err := sc.DB.DeleteUserToUser(ctx, u.ID)
+			CheckHandler(err, message.DeleteError)
 		}
-		friendList2 = append(friendList2, v)
 	}
-	err = service.UpdateUser(ctx, friend)
-	CheckHandler(err, message.UpdateError)
-	ctx.CommitTransaction(ctx)
+	session.Commit()
 	HttpReponseHandler(c, nil)
 }
 
-func ChangeUserInstitution(c *framework.Context) {
+func GetUserDetailInstitution(c *framework.Context) {
 	defer PanicHandler(c)
-	data := &struct {
-		Guid string `json:"guid" bson:"guid"`
-	}{}
-	CheckHandler(!c.ParseBody(data), message.JsonParseError)
+	institutionID := c.GetParam("institution_id")
+	oid, _ := primitive.ObjectIDFromHex(institutionID)
+	sc := service.GetContainerInstance()
+	userInfo := GetContextUserInfo(c)
+	utu, err := sc.DB.GetUserToInstitutionUser(context.TODO(), oid, userInfo.User.ID)
+	CheckHandler(err, message.GetError)
+	HttpReponseHandler(c, utu)
+}
+
+func ChangeCurrentInstitution(c *framework.Context) {
+	defer PanicHandler(c)
+	institutionID := c.GetParam("institution_id")
+	oid, _ := primitive.ObjectIDFromHex(institutionID)
 
 	sc := service.GetContainerInstance()
 	userInfo := GetContextUserInfo(c)
 	session, ctx, err := sc.DB.StartSession()
 	CheckHandler(err, message.HttpError)
-	defer func() {
-		sc.DB.EndSession(session)
-		ctx.AbortTransaction(ctx)
-	}()
-	ctx.StartTransaction()
+	defer session.Close()
 
-	noIns := true
 	opt := db.NewOptions()
-	opt.Search[db.OptUserGuid] = userInfo.User.Guid
-	urList := sc.DB.LoadUserRouter(context.TODO(), opt)
+	opt.EQ[db.OptUser] = userInfo.User.ID
+	urList, err := sc.DB.LoadUserToInstitution(context.TODO(), opt)
 	for _, v := range urList {
-		refIns := sc.DB.GetUserRouter(ctx, v.InstitutionId)
-		if refIns == nil {
-			continue
+		if v.ID == oid {
+			v.Current = true
+			err := sc.DB.UpdateUserToInstitution(ctx, v)
+			CheckHandler(err, message.UpdateError)
+		} else if v.Current {
+			v.Current = false
+			err := sc.DB.UpdateUserToInstitution(ctx, v)
+			CheckHandler(err, message.UpdateError)
 		}
-		if refIns.Guid == data.Guid {
-			refIns.IsCurrent = true
-			noIns = false
-		} else {
-			refIns.IsCurrent = false
-		}
-		err := sc.DB.UpdateUserRouter(ctx, refIns)
-		CheckHandler(err, message.UpdateError)
 	}
-	CheckHandler(noIns, message.GetError)
-	ctx.CommitTransaction(ctx)
+	session.Commit()
 	HttpReponseHandler(c, nil)
 }
 
@@ -316,7 +325,7 @@ func AuthDipperUser(c *framework.Context) {
 
 	sc := service.GetContainerInstance()
 	userInfo := GetContextUserInfo(c)
-	ur := sc.DB.GetUserRouterByTumorUser(context.TODO(), data.InstitutionId, userInfo.User.Guid)
+	ur, _ := sc.DB.GetUserToInstitutionUser(context.TODO(), data.Institution, userInfo.User.ID)
 	CheckHandler(ur == nil, message.RequestDataError)
 	service.ValidateDipperUserPublish(data)
 	HttpReponseHandler(c, nil)

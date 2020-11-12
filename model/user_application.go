@@ -1,26 +1,15 @@
 package model
 
-import "time"
+import (
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
 
 type UserApplication struct {
-	Guid            string    `json:"guid" bson:"_id"`
-	InstitutionId   string    `json:"institution_id" bson:"institution_id"`
-	InstitutionName string    `json:"institution_name" bson:"institution_name"`
-	UserGuid        string    `json:"user_guid" bson:"user_guid"`
-	Type            string    `json:"type" bson:"type"`
-	Status          string    `json:"status" bson:"status"`
-	Creator         string    `json:"creator" bson:"creator"`
-	CreateTime      time.Time `json:"create_time" bson:"create_time"`
-	Description     string    `json:"description" bson:"description"`
+	ID          primitive.ObjectID `json:"_id" bson:"_id"`
+	Friend      primitive.ObjectID `json:"friend" bson:"friend"`
+	FriendName  string             `json:"friend_name" bson:"friend_name"`
+	Status      string             `json:"status" bson:"status"`
+	User        primitive.ObjectID `json:"user" bson:"user"`
+	UserName    string             `json:"user_name" bson:"user_name"`
+	Description string             `json:"description" bson:"description"`
 }
-
-const (
-	ApplicationTypeApplyFriend      = "apply_friend"
-	ApplicationTypeApplyInstitution = "apply_institution"
-)
-
-const (
-	ApplicationStatusWait    = "wait"
-	ApplicationStatusApprove = "approve"
-	ApplicationStatusReject  = "reject"
-)

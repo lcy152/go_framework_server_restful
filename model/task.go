@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"time"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
 
 type Hospital struct {
 	Doctor       string    `json:"doctor" bson:"doctor"`
@@ -55,14 +59,14 @@ type Treatment struct {
 
 type Task struct {
 	Description         string             `json:"description" bson:"description"`
-	InstitutionId       string             `json:"institution_id" bson:"institution_id"`
+	Institution         primitive.ObjectID `json:"institution" bson:"institution"`
 	InstitutionName     string             `json:"institution_name" bson:"institution_name"`
-	Guid                string             `json:"guid" bson:"_id"`
+	ID                  primitive.ObjectID `json:"_id" bson:"_id"`
 	Name                string             `json:"name" bson:"name"`
 	TaskType            string             `json:"task_type" bson:"task_type"`
 	TaskState           string             `json:"task_state" bson:"task_state"`
 	RefPatientPid       string             `json:"ref_patient_pid" bson:"ref_patient_pid"`
-	RefPatientGuid      string             `json:"ref_patient_guid" bson:"ref_patient_guid"`
+	RefPatient          primitive.ObjectID `json:"ref_patient" bson:"ref_patient"`
 	RefPatientName      string             `json:"ref_patient_name" bson:"ref_patient_name"`
 	RefWorkflowGuid     string             `json:"ref_workflow_guid" bson:"ref_workflow_guid"`
 	RefDiagnosisGuid    string             `json:"ref_diagnosis_guid" bson:"ref_diagnosis_guid"`
@@ -75,7 +79,7 @@ type Task struct {
 	NextTaskType        string             `json:"next_task_type" bson:"next_task_type"`
 	NextUserName        string             `json:"next_user_name" bson:"next_user_name"`
 	NextUserId          string             `json:"next_user_id" bson:"next_user_id"`
-	ExecuteUserId       string             `json:"execute_user_id" bson:"execute_user_id"`
+	ExecuteUser         primitive.ObjectID `json:"execute_user" bson:"execute_user"`
 	ExecuteUserType     string             `json:"execute_user_type" bson:"execute_user_type"`
 	ExecuteUserName     string             `json:"execute_user_name" bson:"execute_user_name"`
 	Deadline            time.Time          `json:"deadline" bson:"deadline"`
@@ -86,10 +90,10 @@ type Task struct {
 	RefStudyGuid        string             `json:"ref_study_guid" bson:"ref_study_guid"`
 	RefFlowNumber       int64              `json:"ref_flow_number" bson:"ref_flow_number"`
 	RefFlowGuid         string             `json:"ref_flow_guid" bson:"ref_flow_guid"`
-	LastTaskGuid        string             `json:"last_task_guid" bson:"last_task_guid"`
+	LastTaskGuid        primitive.ObjectID `json:"last_task_guid" bson:"last_task_guid"`
 	Creator             string             `json:"creator" bson:"creator"`
 	LastOperator        string             `json:"last_operator" bson:"last_operator"`
-	CreatedTime         time.Time          `json:"created_time" bson:"created_time"`
+	CreateTime          time.Time          `json:"created_time" bson:"created_time"`
 	LastModTime         time.Time          `json:"last_mod_time" bson:"last_mod_time"`
 	TreatmentList       []*Treatment       `json:"treatment_list" bson:"treatment_list"`         // *
 	Hospital            *Hospital          `json:"hospital" bson:"hospital"`                     // *

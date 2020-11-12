@@ -21,14 +21,12 @@ func LoadDipperMessage(c *framework.Context) {
 	userInfo := GetContextUserInfo(c)
 	sc := service.GetContainerInstance()
 	opt := db.NewOptions()
-	opt.Search[db.OptSenderGuid] = userInfo.User.Guid
-	opt.Search[db.OptReceiverGuid] = userInfo.User.Guid
-	opt.Regex[db.OptSenderGuid] = true
-	opt.Regex[db.OptReceiverGuid] = true
+	opt.Match[db.OptSender] = userInfo.User.ID
+	opt.Match[db.OptReceiver] = userInfo.User.ID
 	if data.Search != "" {
-		opt.Search[db.OptData] = data.Search
+		opt.EQ[db.OptData] = data.Search
 	}
-	opt.Sort = append(opt.Sort, db.OptCreateTime)
+	// opt.Sort = append(opt.Sort, db.OptCreateTime)
 	msgList, err := sc.DB.LoadDipperMessage(context.TODO(), opt)
 	CheckHandler(err, message.GetError)
 	HttpReponseHandler(c, msgList)

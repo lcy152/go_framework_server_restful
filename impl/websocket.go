@@ -23,7 +23,7 @@ func WSBaseMessage(c *framework.Context) {
 	sendChan := make(chan string)
 	sc := service.GetContainerInstance()
 	userInfo := GetContextUserInfo(c)
-	url := service.GetMessageKey(userInfo.User.Guid)
+	url := service.GetMessageKey(userInfo.User.ID.String())
 	sc.Dispatch.Subscribe(url, sendChan)
 	defer sc.Dispatch.Unsubscribe(url, sendChan)
 	if wsConn, err = upgrade.Upgrade(c.W, c.Req, nil); err != nil {
@@ -69,7 +69,7 @@ func WSMessage(c *framework.Context) {
 	token := c.GetParam("token")
 	userInfo, err := service.TokenValidate(token, c.Req.Host)
 	CheckHandler(err, message.ValidateError)
-	url := service.GetMessageKey(userInfo.User.Guid)
+	url := service.GetMessageKey(userInfo.User.ID.String())
 	log.Println("websocket open: " + url)
 
 	sendChan := make(chan string)

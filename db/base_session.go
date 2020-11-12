@@ -10,6 +10,20 @@ import (
 type Session struct {
 	sess mongo.Session
 	ctx  context.Context
+	sctx mongo.SessionContext
+}
+
+func (s *Session) Start() {
+	s.sctx.StartTransaction()
+}
+
+func (s *Session) Commit() {
+	s.sctx.CommitTransaction(s.sctx)
+}
+
+func (s *Session) Close() {
+	s.sess.EndSession(s.ctx)
+	s.sctx.AbortTransaction(s.sctx)
 }
 
 func (database *Database) StartSession() (*Session, mongo.SessionContext, error) {
@@ -30,12 +44,7 @@ func (database *Database) StartSession() (*Session, mongo.SessionContext, error)
 	if err != nil {
 		return nil, nil, err
 	}
-	return &session, sctx, nil
-}
-
-func (database *Database) EndSession(session *Session) {
-	if session == nil {
-		return
-	}
-	session.sess.EndSession(session.ctx)
+	session.sctx = sctx
+	session.Start()
+	return &session, session.sctx, nil
 }

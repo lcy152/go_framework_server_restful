@@ -6,7 +6,7 @@ import (
 
 	redis "tumor_server/redis"
 
-	uuid "github.com/satori/go.uuid"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 var instance *Container
@@ -32,7 +32,6 @@ type ServerConfig struct {
 	Host                     string
 	Port                     int
 	RedisIP                  string
-	RedisPort                int
 	DatabaseUrl              string
 	ExpireTime               int
 	LogPath                  string
@@ -61,7 +60,7 @@ type Container struct {
 func NewContainer(serverConfig *ServerConfig) *Container {
 	container := new(Container)
 	container.Config = serverConfig
-	container.RedisService = redis.ConnectRedis(serverConfig.RedisIP, serverConfig.RedisPort, serverConfig.ExpireTime, serverConfig.BlackListLimiteTime)
+	container.RedisService = redis.ConnectRedis(serverConfig.RedisIP, serverConfig.ExpireTime, serverConfig.BlackListLimiteTime)
 	InitRedis(container.RedisService)
 	url := "mongodb://datu_super_root:c74c112dc3130e35e9ac88c90d214555__strong@" + container.Config.DatabaseUrl + "/datu_data"
 	container.DB = db.NewDatabase(url)
@@ -71,6 +70,6 @@ func NewContainer(serverConfig *ServerConfig) *Container {
 	return container
 }
 
-func NewUUID() string {
-	return uuid.Must(uuid.NewV4(), nil).String()
+func NewUUID() primitive.ObjectID {
+	return primitive.NewObjectID()
 }

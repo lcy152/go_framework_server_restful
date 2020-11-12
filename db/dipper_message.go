@@ -2,22 +2,20 @@ package db
 
 import (
 	"log"
-	"time"
 	"tumor_server/model"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/net/context"
 )
 
 func (database *Database) AddDipperMessage(ctx context.Context, r *model.DipperMessage) error {
 	db := database.DB.Collection(table.DipperMssage)
-	tn := time.Now()
-	r.CreateTime = tn
 	_, error := db.InsertOne(ctx, r)
 	return error
 }
 
-func (database *Database) DeleteDipperMessage(ctx context.Context, guid string) error {
+func (database *Database) DeleteDipperMessage(ctx context.Context, guid primitive.ObjectID) error {
 	db := database.DB.Collection(table.DipperMssage)
 	_, error := db.DeleteOne(ctx, bson.D{{"_id", guid}})
 	return error
@@ -25,27 +23,26 @@ func (database *Database) DeleteDipperMessage(ctx context.Context, guid string) 
 
 func (database *Database) UpdateDipperMessage(ctx context.Context, r *model.DipperMessage) error {
 	db := database.DB.Collection(table.DipperMssage)
-	_, error := db.UpdateOne(ctx, bson.D{{"_id", r.Guid}}, bson.D{{"$set", r}})
+	_, error := db.UpdateOne(ctx, bson.D{{"_id", r.ID}}, bson.D{{"$set", r}})
 	return error
 }
 
-func (database *Database) GetDipperMessage(ctx context.Context, guid string) *model.DipperMessage {
+func (database *Database) GetDipperMessage(ctx context.Context, guid primitive.ObjectID) (*model.DipperMessage, error) {
 	db := database.DB.Collection(table.DipperMssage)
 	user := new(model.DipperMessage)
 	err := db.FindOne(ctx, bson.D{{"_id", guid}}).Decode(user)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return user
+	return user, nil
 }
 
 func (database *Database) LoadDipperMessage(ctx context.Context, opt *option) ([]*model.DipperMessage, error) {
 	db := database.DB.Collection(table.DipperMssage)
 	need := make(map[OptionKey]string)
-	need[OptInstitutionId] = "institution_id"
-	need[OptSenderGuid] = "sender_guid"
-	need[OptReceiverGuid] = "receiver_guid"
-	need[OptCreateTime] = "create_time"
+	need[OptInstitution] = "sender_institution"
+	need[OptSender] = "sender"
+	need[OptReceiver] = "receiver"
 	need[OptData] = "data"
 	query, option := opt.toFind(need)
 	cur, err := db.Find(ctx, query, &option)

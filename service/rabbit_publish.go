@@ -6,11 +6,14 @@ import (
 	"errors"
 	"log"
 	"tumor_server/model"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func PublishToMQ(institutionId string, flag string, data []byte) {
 	sc := GetContainerInstance()
-	ins := sc.DB.GetInstitution(context.TODO(), institutionId)
+	insID, _ := primitive.ObjectIDFromHex(institutionId)
+	ins, _ := sc.DB.GetInstitution(context.TODO(), insID)
 	if ins == nil {
 		log.Println("empty institution")
 		return
@@ -21,12 +24,12 @@ func PublishToMQ(institutionId string, flag string, data []byte) {
 	msg.Data = string(data)
 	msgByte, _ := json.Marshal(msg)
 	if sc.RabbitMQ != nil {
-		sc.RabbitMQ.Publish(ins.Guid, string(msgByte))
+		sc.RabbitMQ.Publish(ins.ID.String(), string(msgByte))
 	}
 }
 
 func ValidateDipperUserPublish(du *model.ValidateDipperUser) error {
-	if du.InstitutionId == "" {
+	if du.Institution.String() == "" {
 		log.Println("empty institution")
 		return errors.New("empty institutionId")
 	}
@@ -35,7 +38,7 @@ func ValidateDipperUserPublish(du *model.ValidateDipperUser) error {
 		log.Println(err)
 		return err
 	}
-	PublishToMQ(du.InstitutionId, model.MQUserValidation, msgByte)
+	PublishToMQ(du.Institution.String(), model.MQUserValidation, msgByte)
 	return nil
 }
 
@@ -48,28 +51,28 @@ func DipperTaskPublish(institutionId string, data []byte) bool {
 		log.Println(err)
 		return true
 	}
-	res.Guid = NewUUID()
+	res.ID = NewUUID()
 
-	refIns := sc.DB.GetUserRouterByTumorUser(context.TODO(), res.InstitutionId, res.ExecuteUserId)
+	refIns, _ := sc.DB.GetUserToInstitutionUser(context.TODO(), res.Institution, res.ExecuteUser)
 	if refIns == nil {
 		log.Println(err)
 		return false
 	}
-	user := sc.DB.GetUser(context.TODO(), refIns.UserGuid)
-	if user == nil {
+	_, err = sc.DB.GetUser(context.TODO(), refIns.User)
+	if err != nil {
 		return false
 	}
-	res.ExecuteUserId = refIns.DipperUser
+	// res.ExecuteUser = refIns.DipperUser
 
-	refIns2 := sc.DB.GetUserRouterByTumorUser(context.TODO(), res.InstitutionId, res.RefPatientGuid)
+	refIns2, _ := sc.DB.GetUserToInstitutionUser(context.TODO(), res.Institution, res.RefPatient)
 	if refIns2 == nil {
-		res.RefPatientGuid = refIns2.UserGuid
+		res.RefPatient = refIns2.User
 	}
 	msgByte, err := json.Marshal(res)
 	if err != nil {
 		log.Println(err)
 		return false
 	}
-	PublishToMQ(res.InstitutionId, model.MQTask, msgByte)
+	PublishToMQ(res.Institution.String(), model.MQTask, msgByte)
 	return true
 }

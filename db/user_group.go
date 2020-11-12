@@ -2,22 +2,20 @@ package db
 
 import (
 	"log"
-	"time"
 	"tumor_server/model"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/net/context"
 )
 
 func (database *Database) AddUserGroup(ctx context.Context, r *model.UserGroup) error {
 	db := database.DB.Collection(table.UserGroup)
-	tn := time.Now()
-	r.CreateTime = tn
 	_, error := db.InsertOne(ctx, r)
 	return error
 }
 
-func (database *Database) DeleteUserGroup(ctx context.Context, guid string) error {
+func (database *Database) DeleteUserGroup(ctx context.Context, guid primitive.ObjectID) error {
 	db := database.DB.Collection(table.UserGroup)
 	_, error := db.DeleteOne(ctx, bson.D{{"_id", guid}})
 	return error
@@ -25,26 +23,24 @@ func (database *Database) DeleteUserGroup(ctx context.Context, guid string) erro
 
 func (database *Database) UpdateUserGroup(ctx context.Context, r *model.UserGroup) error {
 	db := database.DB.Collection(table.UserGroup)
-	_, error := db.UpdateOne(ctx, bson.D{{"_id", r.Guid}}, bson.D{{"$set", r}})
+	_, error := db.UpdateOne(ctx, bson.D{{"_id", r.ID}}, bson.D{{"$set", r}})
 	return error
 }
 
-func (database *Database) GetUserGroup(ctx context.Context, guid string) *model.UserGroup {
+func (database *Database) GetUserGroup(ctx context.Context, guid primitive.ObjectID) (*model.UserGroup, error) {
 	db := database.DB.Collection(table.UserGroup)
 	user := new(model.UserGroup)
 	err := db.FindOne(ctx, bson.D{{"_id", guid}}).Decode(user)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return user
+	return user, nil
 }
 
 func (database *Database) LoadUserGroup(ctx context.Context, opt *option) ([]*model.UserGroup, int64, error) {
 	db := database.DB.Collection(table.UserGroup)
 	need := make(map[OptionKey]string)
-	need[OptManager] = "manager._id"
-	need[OptMember] = "member._id"
-	need[OptCreateTime] = "create_time"
+	need[OptInstitution] = "institution"
 	query, option := opt.toFind(need)
 	count, err := db.CountDocuments(ctx, query)
 	if err != nil {

@@ -21,7 +21,7 @@ type UserTokenInfo struct {
 }
 
 type Token struct {
-	Guid      string `json:"guid"`
+	ID        string `json:"_id"`
 	LoginTime int64  `json:"login_time"`
 }
 
@@ -41,7 +41,7 @@ func UnmarshalToken(token string) (*Token, error) {
 		return nil, err
 	}
 	err = json.Unmarshal(decodeBytes, t)
-	if t.Guid == "" {
+	if t.ID == "" {
 		return nil, errors.New("empty guid")
 	}
 	return t, nil
@@ -57,7 +57,7 @@ func AddUserTokenInfo(info *UserTokenInfo) error {
 	if err != nil {
 		return err
 	}
-	err = sc.RedisService.AddKey(NewUserTokenInfoKey(info.User.Guid), string(message))
+	err = sc.RedisService.AddKey(NewUserTokenInfoKey(info.User.ID.String()), string(message))
 	if err != nil {
 		return err
 	}
@@ -94,10 +94,10 @@ func TokenValidate(token, ip string) (*UserTokenInfo, error) {
 	if err != nil {
 		return nil, errors.New(message.ValidateError)
 	}
-	userInfo, err := GetUserTokenInfo(tokenInfo.Guid)
+	userInfo, err := GetUserTokenInfo(tokenInfo.ID)
 	if err != nil {
-		user := sc.DB.GetUserByToken(context.TODO(), token)
-		if user == nil {
+		user, err := sc.DB.GetUserByToken(context.TODO(), token)
+		if err != nil {
 			return nil, errors.New(message.ValidateError)
 		}
 		userInfo = &UserTokenInfo{
@@ -107,7 +107,7 @@ func TokenValidate(token, ip string) (*UserTokenInfo, error) {
 			IP:        ip,
 		}
 		AddUserTokenInfo(userInfo)
-		AddUserRecord(user.Guid, model.UserOperationLogin, "", ip)
+		AddUserRecord(user.ID, model.UserOperationLogin, ip)
 	} else if tokenInfo.LoginTime != userInfo.LoginTime {
 		return nil, errors.New(message.OtherPlaceLoginError)
 	}

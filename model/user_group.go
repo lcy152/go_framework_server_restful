@@ -1,11 +1,12 @@
 package model
 
-import "time"
+import (
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
 
 type UserGroup struct {
-	Guid       string    `json:"guid" bson:"_id"`
-	Name       string    `json:"name" bson:"name"`
-	Manager    []string  `json:"manager" bson:"manager"`
-	Member     []string  `json:"member" bson:"member"`
-	CreateTime time.Time `json:"create_time" bson:"create_time"`
+	ID              primitive.ObjectID `json:"_id" bson:"_id"`
+	Name            string             `json:"name" bson:"name"`
+	Institution     primitive.ObjectID `json:"institution" bson:"institution"`
+	InstitutionName string             `json:"institution_name" bson:"institution_name"`
 }

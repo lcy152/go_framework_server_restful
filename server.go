@@ -27,22 +27,24 @@ func NewServer() *framework.Engine {
 
 	// admin
 	s.AddMiddleware("/v1/admin", impl.V1AdminMiddleware)
-	s.POST("/v1/admin/user_list", impl.GetUserList)
-	s.POST("/v1/admin/user_activity", impl.GetUserActivity)
-	s.POST("/v1/admin/user_login_record", impl.GetUserLoginRecord)
+	s.GET("/v1/admin/user_list", impl.UserList)
+	s.GET("/v1/admin/user_operation", impl.UserOperation)
+	s.PUT("/v1/admin/user", impl.AddUser)
 
 	// user
 	s.AddMiddleware("/v1/auth", impl.V1AuthMiddleware)
-	s.PUT("/v1/auth/user", impl.AddUser)
 	s.GET("/v1/auth/user", impl.GetUser)
 	s.POST("/v1/auth/user", impl.EditUser)
 
 	// user_detail
 	s.POST("/v1/auth/user_detail/password", impl.EditUserPassword)
 	s.POST("/v1/auth/user_detail/phone", impl.EditUserPhone)
-	s.POST("/v1/auth/user_detail/institution", impl.ChangeUserInstitution)
-	s.GET("/v1/auth/user_detail/institution", impl.LoadUserInstitution)
-	s.GET("/v1/auth/user_detail/friend_list", impl.GetUserFriendList)
+	s.POST("/v1/auth/user_detail/institution/:institution_id", impl.ChangeCurrentInstitution)
+	s.GET("/v1/auth/user_detail/institution/:institution_id", impl.GetUserDetailInstitution)
+	s.GET("/v1/auth/user_detail/friend_list", impl.UserFriendList)
+	s.GET("/v1/auth/user_detail/institution_list", impl.UserInstitutionList)
+	s.GET("/v1/auth/user_detail/role_list/:user_id/:institution_id", impl.UserRoleList)
+	s.GET("/v1/auth/user_detail/user_group_list", impl.UserUserGroupList)
 
 	// friend
 	s.PUT("/v1/auth/friend", impl.AddFriend)
@@ -61,10 +63,11 @@ func NewServer() *framework.Engine {
 	// institution detail
 	s.GET("/v1/auth/institution_list", impl.LoadInstitution)
 	s.GET("/v1/auth/institution_detail/user_list/:institution_id", impl.InstitutionUserList)
+	s.GET("/v1/auth/institution_detail/role_list/:institution_id", impl.InstitutionRoleList)
 
 	// institution apply
-	s.GET("/v1/auth/institution_detail/application/:institution_id/:state", impl.GetInstitutionApply)
-	s.PUT("/v1/auth/institution_detail/application/:institution_id/:description", impl.ApplyInstitution)
+	s.GET("/v1/auth/institution_detail/application/:institution_id/:state", impl.InstitutionApply)
+	s.PUT("/v1/auth/institution_detail/application", impl.ApplyInstitution)
 	s.POST("/v1/auth/institution_detail/application/:id", impl.ApproveInstitution)
 	s.DELETE("/v1/auth/institution_detail/application/:id", impl.RejectInstitution)
 
@@ -82,13 +85,22 @@ func NewServer() *framework.Engine {
 	s.PUT("/v1/auth/user_group", impl.AddUserGroup)
 	s.POST("/v1/auth/user_group", impl.EditUserGroup)
 	s.DELETE("/v1/auth/user_group/:id", impl.DeleteUserGroup)
-	s.GET("/v1/auth/user_group_list", impl.GetUserGroupList)
+	s.GET("/v1/auth/user_group_member/:id", impl.GetUserGroupUser)
+	s.PUT("/v1/auth/user_group_member", impl.AddUserGroupUser)
+	s.DELETE("/v1/auth/user_group_member/:id", impl.DeleteUserGroupUser)
+
+	// role
+	s.GET("/v1/auth/role/:id", impl.GetRole)
+	s.DELETE("/v1/auth/role/:id", impl.GetRole)
+	s.PUT("/v1/auth/role", impl.AddRole)
+	s.POST("/v1/auth/role", impl.EditRole)
+	s.GET("/v1/auth/role_detail/authority_list/:role_id", impl.RoleAuthorityList)
 
 	// task
 	s.POST("/v1/auth/task", impl.EditTask)
 	s.GET("/v1/auth/task/:id", impl.GetTask)
 	// search
-	s.POST("/v1/auth/search/user", impl.SearchUser)
+	s.GET("/v1/auth/search/user", impl.SearchUser)
 
 	// websocket
 	s.WS("/v1/ws/message/:token", impl.WSMessage)

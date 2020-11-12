@@ -5,14 +5,11 @@ type OptionKey uint64
 const (
 	OptInvalid OptionKey = iota
 	// base
-	OptGuid
+	OptID
 	OptName
-	OptInstitutionId
-	OptInstitutionList
+	OptInstitution
 	OptInstitutionName
 	OptDipperUser
-	OptCreateTime
-	OptLastModTime
 	OptType
 	OptFlag
 	OptStatus
@@ -23,41 +20,44 @@ const (
 	OptKeyCode
 	OptToken
 	OptAddress
-	OptCreator
 	OptCode
 	OptIDCard
 	// user
-	OptApprove
 	OptDisable
-	OptRole
-	OptGroupIdList
-	OptGroupId
+	OptHidden
 	OptData
-	OptUserID
+	OptUser
+	OptUserName
 	OptCurrent
+	OptNumber
 	// group
 	OptManager
 	OptMember
+	OptGroup
 	// patient
-	OptUserGuid
+	OptFriend
+	OptFriendName
+	OptPatient
 	OptPatientName
-	OptPatientGuid
 	OptPatientPid
 	// report patient
 	OptReportTime
 	OptBeginTime
 	OptIndexNumber
 	// study
-	OptStudyGuid
+	OptStudy
 	// plan
 	OptFxNumber
 	OptFxCount
-	OptPlanGuid
+	OptPlan
 	// task
-	OptTaskGuid
+	OptTask
 	OptTaskState
 	OptTaskType
 	// tumor
-	OptSenderGuid
-	OptReceiverGuid
+	OptSender
+	OptReceiver
+	// role
+	OptRole
+	OptAuthority
 )

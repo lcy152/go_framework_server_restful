@@ -39,9 +39,9 @@ func ValidateDipperUserConsume(institutionId string, data []byte) bool {
 		return false
 	}
 	opt := db.NewOptions()
-	opt.Search[db.OptInstitutionId] = res.InstitutionId
-	opt.Search[db.OptUserGuid] = res.UserGuid
-	refIns := sc.DB.LoadUserRouter(context.TODO(), opt)
+	opt.EQ[db.OptInstitution] = res.Institution
+	opt.EQ[db.OptUser] = res.UserGuid
+	refIns, _ := sc.DB.LoadUserToInstitution(context.TODO(), opt)
 	if refIns == nil {
 		return false
 	}
@@ -49,7 +49,7 @@ func ValidateDipperUserConsume(institutionId string, data []byte) bool {
 		for _, v := range refIns {
 			v.DipperUser = res.DipperUser
 			v.DipperPassword = res.Password
-			err := sc.DB.UpdateUserRouter(context.TODO(), v)
+			err := sc.DB.UpdateUserToInstitution(context.TODO(), v)
 			if err != nil {
 				continue
 			}
@@ -58,7 +58,7 @@ func ValidateDipperUserConsume(institutionId string, data []byte) bool {
 		for _, v := range refIns {
 			v.DipperUser = ""
 			v.DipperPassword = ""
-			err := sc.DB.UpdateUserRouter(context.TODO(), v)
+			err := sc.DB.UpdateUserToInstitution(context.TODO(), v)
 			if err != nil {
 				continue
 			}
@@ -76,26 +76,26 @@ func MQTaskConsume(institutionId string, data []byte) bool {
 		log.Println(err)
 		return true
 	}
-	res.Guid = NewUUID()
+	res.ID = NewUUID()
 
-	refIns := sc.DB.GetUserRouterByDipperUser(context.TODO(), res.InstitutionId, res.ExecuteUserId)
+	refIns, _ := sc.DB.GetUserToInstitutionDipperUser(context.TODO(), res.Institution, res.ExecuteUser.String())
 	if refIns == nil {
 		log.Println(err)
 		return false
 	}
-	user := sc.DB.GetUser(context.TODO(), refIns.UserGuid)
+	user, _ := sc.DB.GetUser(context.TODO(), refIns.User)
 	if user == nil {
 		return false
 	}
 	res.InstitutionName = refIns.InstitutionName
-	res.ExecuteUserId = user.Guid
+	res.ExecuteUser = user.ID
 	res.ExecuteUserName = user.Name
 	res.ExecuteUserType = refIns.Type
 
-	refIns2 := sc.DB.GetUserRouterByDipperUser(context.TODO(), res.InstitutionId, res.RefPatientPid)
+	refIns2, _ := sc.DB.GetUserToInstitutionDipperUser(context.TODO(), res.Institution, res.RefPatientPid)
 	if refIns2 != nil {
-		res.RefPatientGuid = refIns2.UserGuid
-		patient := sc.DB.GetUser(context.TODO(), refIns2.UserGuid)
+		res.RefPatient = refIns2.User
+		patient, _ := sc.DB.GetUser(context.TODO(), refIns2.User)
 		if user != nil {
 			res.RefPatientName = patient.Name
 		}
@@ -134,12 +134,12 @@ func SendTaskMessage(task *model.Task) {
 		model.CONST_TASK_START_CODE: "已创建", model.CONST_TASK_PAUSE_CODE: "已完成", model.CONST_TASK_FINISH_CODE: "已暂停", model.CONST_TASK_REVERT_CODE: "已退回",
 	}
 	msg := new(model.DipperMessage)
-	msg.Guid = NewUUID()
+	msg.ID = NewUUID()
 	msg.Flag = "task"
 	msg.Type = task.TaskType
-	msg.InstitutionId = task.InstitutionId
+	// msg.Institution = task.Institution
 	msg.InstitutionName = task.InstitutionName
-	msg.RefPatientGuid = task.RefPatientGuid
+	// msg.RefPatient = task.RefPatientGuid
 	msg.RefPatientName = task.RefPatientName
 	msg.CreateTime = time.Now()
 	msg.Msg = "任务提醒: " + msg.RefPatientName + " 的 " + taskNameMap[task.TaskType] + " " + statusMap[task.TaskState] + "。" + time.Now().Format("2006-01-02 15:04:05")
@@ -162,6 +162,6 @@ func AddDipperMessage(data []byte) bool {
 		log.Printf("AddDipperMessage error, message: %s", string(data))
 		return false
 	}
-	SendCenterMessage(request.ReceiverGuid, string(data))
+	// SendCenterMessage(request.ReceiverGuid, string(data))
 	return true
 }

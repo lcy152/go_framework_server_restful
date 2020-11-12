@@ -2,22 +2,20 @@ package db
 
 import (
 	"log"
-	"time"
 	"tumor_server/model"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/net/context"
 )
 
 func (database *Database) AddUserOperation(ctx context.Context, r *model.UserOperation) error {
 	db := database.DB.Collection(table.UserOperation)
-	tn := time.Now()
-	r.CreateTime = tn
 	_, error := db.InsertOne(ctx, r)
 	return error
 }
 
-func (database *Database) DeleteUserOperation(ctx context.Context, guid string) error {
+func (database *Database) DeleteUserOperation(ctx context.Context, guid primitive.ObjectID) error {
 	db := database.DB.Collection(table.UserOperation)
 	_, error := db.DeleteOne(ctx, bson.D{{"_id", guid}})
 	return error
@@ -25,11 +23,11 @@ func (database *Database) DeleteUserOperation(ctx context.Context, guid string) 
 
 func (database *Database) UpdateUserOperation(ctx context.Context, r *model.UserOperation) error {
 	db := database.DB.Collection(table.UserOperation)
-	_, error := db.UpdateOne(ctx, bson.D{{"_id", r.Guid}}, bson.D{{"$set", r}})
+	_, error := db.UpdateOne(ctx, bson.D{{"_id", r.ID}}, bson.D{{"$set", r}})
 	return error
 }
 
-func (database *Database) GetUserOperation(ctx context.Context, guid string) *model.UserOperation {
+func (database *Database) GetUserOperation(ctx context.Context, guid primitive.ObjectID) *model.UserOperation {
 	db := database.DB.Collection(table.UserOperation)
 	user := new(model.UserOperation)
 	err := db.FindOne(ctx, bson.D{{"_id", guid}}).Decode(user)
@@ -42,10 +40,10 @@ func (database *Database) GetUserOperation(ctx context.Context, guid string) *mo
 func (database *Database) LoadUserOperation(ctx context.Context, opt *option) ([]*model.UserOperation, int64, error) {
 	db := database.DB.Collection(table.UserOperation)
 	need := make(map[OptionKey]string)
-	need[OptUserGuid] = "user_guid"
-	need[OptInstitutionId] = "institution_id"
+	need[OptID] = "_id"
+	need[OptUser] = "user_guid"
+	need[OptInstitution] = "institution"
 	need[OptType] = "type"
-	need[OptCreateTime] = "create_time"
 	query, option := opt.toFind(need)
 	count, err := db.CountDocuments(ctx, query)
 	if err != nil {
