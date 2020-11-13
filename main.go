@@ -1,9 +1,10 @@
 package main
 
 import (
-	"log"
 	"strconv"
 	service "tumor_server/service"
+
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
@@ -12,6 +13,6 @@ func main() {
 	container := service.NewContainerInstance(config)
 	createDefault(container)
 	s := NewServer()
-	log.Println("start server success")
+	logrus.Println("start server success")
 	s.Run(":" + strconv.Itoa(config.Port))
 }

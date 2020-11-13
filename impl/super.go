@@ -96,7 +96,8 @@ func ApproveAddInstitutionApplication(c *framework.Context) {
 	}
 	err = sc.DB.AddUserToInstitution(ctx, uti)
 	CheckHandler(err, message.AddError)
-	op.Status = model.AddInstitutionApplicationStatusApprove
+	op.Status = model.ApplicationStatusApprove
+	op.OperateTime = time.Now()
 	err = sc.DB.UpdateAddInstitutionApplication(ctx, op)
 	CheckHandler(err, message.UpdateError)
 	session.Commit()
@@ -112,7 +113,8 @@ func RejectAddInstitutionApplication(c *framework.Context) {
 	sc := service.GetContainerInstance()
 	op, err := sc.DB.GetAddInstitutionApplication(context.TODO(), oid)
 	CheckHandler(err, message.GetError)
-	op.Status = model.AddInstitutionApplicationStatusReject
+	op.Status = model.ApplicationStatusReject
+	op.OperateTime = time.Now()
 	err = sc.DB.UpdateAddInstitutionApplication(context.TODO(), op)
 	CheckHandler(err, message.UpdateError)
 	jsonStr, _ := json.Marshal(op)

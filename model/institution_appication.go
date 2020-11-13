@@ -1,6 +1,8 @@
 package model
 
 import (
+	"time"
+
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -13,6 +15,8 @@ type InstitutionApplication struct {
 	Status            string             `json:"status" bson:"status"`
 	UserToInstitution *UserToInstitution `json:"user_to_institution" bson:"user_to_institution"`
 	Description       string             `json:"description" bson:"description"`
+	CreateTime        time.Time          `json:"create_time" bson:"create_time"`
+	OperateTime       time.Time          `json:"operate_time" bson:"operate_time"`
 }
 
 const (

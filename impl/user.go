@@ -173,6 +173,7 @@ func AddFriend(c *framework.Context) {
 		User:        userInfo.User.ID,
 		UserName:    userInfo.User.Name,
 		Description: data.Description,
+		CreateTime:  time.Now(),
 	}
 	err = sc.DB.AddUserApplication(context.TODO(), userApplication)
 	CheckHandler(err, message.AddError)
@@ -195,6 +196,7 @@ func ApproveFriend(c *framework.Context) {
 	CheckHandler(op == nil, message.GetError)
 	CheckHandler(op.User != userInfo.User.ID, message.AuthorityError)
 	op.Status = model.ApplicationStatusApprove
+	op.OperateTime = time.Now()
 	err = sc.DB.UpdateUserApplication(ctx, op)
 	CheckHandler(err, message.UpdateError)
 
@@ -234,6 +236,7 @@ func RejectFriend(c *framework.Context) {
 	CheckHandler(op == nil, message.GetError)
 	CheckHandler(op.User != userInfo.User.ID, message.AuthorityError)
 	op.Status = model.ApplicationStatusReject
+	op.OperateTime = time.Now()
 	err := sc.DB.UpdateUserApplication(context.TODO(), op)
 	CheckHandler(err, message.UpdateError)
 	jsonStr, _ := json.Marshal(op)

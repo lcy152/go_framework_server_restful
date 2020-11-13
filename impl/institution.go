@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strconv"
+	"time"
 	"tumor_server/db"
 	framework "tumor_server/framework"
 	message "tumor_server/message"
@@ -24,16 +25,18 @@ func AddAddInstitutionApplication(c *framework.Context) {
 	{
 		option := db.NewOptions()
 		option.EQ[db.OptUser] = userInfo.User.ID
-		option.EQ[db.OptStatus] = model.AddInstitutionApplicationStatusWait
+		option.EQ[db.OptStatus] = model.ApplicationStatusWait
 		uaList, _, _ := sc.DB.LoadAddInstitutionApplication(context.TODO(), option)
 		CheckHandler(len(uaList) != 0, message.RequestRepeatError)
 	}
 	data.ID = primitive.NewObjectID()
 	data.User = userInfo.User.ID
 	data.UserName = userInfo.User.Name
-	data.Status = model.AddInstitutionApplicationStatusWait
+	data.CreateTime = time.Now()
+	data.Status = model.ApplicationStatusWait
 	data.Institution.ID = primitive.NewObjectID()
 	data.Institution.Creator = data.User
+	data.Institution.CreateTime = time.Now()
 	err = sc.DB.AddAddInstitutionApplication(context.TODO(), data)
 	CheckHandler(err, message.AddError)
 	opt := db.NewOptions()
@@ -53,7 +56,7 @@ func DeleteAddInstitutionApplication(c *framework.Context) {
 	sc := service.GetContainerInstance()
 	application, err := sc.DB.GetAddInstitutionApplication(context.TODO(), oid)
 	CheckHandler(err, message.GetError)
-	CheckHandler(application.Status != model.AddInstitutionApplicationStatusWait, message.GetError)
+	CheckHandler(application.Status != model.ApplicationStatusWait, message.GetError)
 	err = sc.DB.DeleteAddInstitutionApplication(context.TODO(), oid)
 	CheckHandler(err, message.DeleteError)
 	HttpReponseHandler(c, nil)
@@ -177,6 +180,7 @@ func ApplyInstitution(c *framework.Context) {
 	data.InstitutionName = institution.Name
 	data.User = userInfo.User.ID
 	data.UserName = userInfo.User.Name
+	data.CreateTime = time.Now()
 	data.Status = model.ApplicationStatusWait
 	data.UserToInstitution.ID = primitive.NewObjectID()
 	data.UserToInstitution.Institution = data.Institution
@@ -218,6 +222,7 @@ func ApproveInstitution(c *framework.Context) {
 	err = sc.DB.AddUserToInstitution(ctx, op.UserToInstitution)
 	CheckHandler(err, message.AddError)
 	op.Status = model.ApplicationStatusApprove
+	op.OperateTime = time.Now()
 	err = sc.DB.UpdateInstitutionApplication(ctx, op)
 	CheckHandler(err, message.UpdateError)
 	session.Commit()
@@ -234,6 +239,7 @@ func RejectInstitution(c *framework.Context) {
 	op, err := sc.DB.GetInstitutionApplication(context.TODO(), oid)
 	CheckHandler(err, message.GetError)
 	op.Status = model.ApplicationStatusReject
+	op.OperateTime = time.Now()
 	err = sc.DB.UpdateInstitutionApplication(context.TODO(), op)
 	CheckHandler(err, message.UpdateError)
 	jsonStr, _ := json.Marshal(op)
